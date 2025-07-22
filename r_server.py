@@ -171,37 +171,32 @@ def get_or_create_r_container():
             raise RuntimeError("Could not create container with any available image")
         
         # Install common packages in the persistent container (using binary packages)
-        setup_script = '''
-        # Use faster binary packages when available
-        options(repos = c(CRAN = "https://cloud.r-project.org/"))
+        # Create the R setup script without single quotes to avoid shell issues
+        setup_commands = [
+            'options(repos = c(CRAN = "https://cloud.r-project.org/"))',
+            'cat("Installing common R packages...\\n")',
+            'packages <- c("readxl", "writexl", "dplyr", "tidyr", "ggplot2", "cowplot")',
+            'system("apt-get update > /dev/null 2>&1", ignore.stderr=TRUE, ignore.stdout=TRUE)',
+            'system("apt-get install -y r-cran-readxl r-cran-dplyr r-cran-tidyr r-cran-ggplot2 > /dev/null 2>&1", ignore.stderr=TRUE, ignore.stdout=TRUE)',
+            'for(pkg in packages) {',
+            '  if(!require(pkg, character.only=TRUE, quietly=TRUE)) {',
+            '    cat("Installing", pkg, "from CRAN...\\n")',
+            '    install.packages(pkg, type="binary", quiet=TRUE)',
+            '    if(!require(pkg, character.only=TRUE, quietly=TRUE)) {',
+            '      install.packages(pkg, type="source", quiet=TRUE)',
+            '    }',
+            '  }',
+            '}',
+            'cat("All packages ready!\\n")'
+        ]
         
-        # Install common packages once (prefer binary)
-        cat("Installing common R packages (binary when available)...\\n")
-        packages <- c("readxl", "writexl", "dplyr", "tidyr", "ggplot2", "cowplot")
+        # Execute each command separately to avoid quote issues
+        for cmd in setup_commands:
+            exec_result = container.exec_run(["Rscript", "-e", cmd])
+            if exec_result.exit_code != 0 and "require" not in cmd and "install.packages" not in cmd:
+                print(f"Warning: Command failed: {cmd}: {exec_result.output.decode()}", file=sys.stderr)
         
-        # Try to install from Ubuntu repos first (fastest)
-        system("apt-get update > /dev/null 2>&1", ignore.stderr=TRUE, ignore.stdout=TRUE)
-        system("apt-get install -y r-cran-readxl r-cran-dplyr r-cran-tidyr r-cran-ggplot2 > /dev/null 2>&1", ignore.stderr=TRUE, ignore.stdout=TRUE)
-        
-        # Install any remaining packages from CRAN
-        for(pkg in packages) {
-          if(!require(pkg, character.only=TRUE, quietly=TRUE)) {
-            cat("Installing", pkg, "from CRAN...\\n")
-            install.packages(pkg, type="binary", quiet=TRUE)
-            # If binary fails, try source but don't wait too long
-            if(!require(pkg, character.only=TRUE, quietly=TRUE)) {
-              install.packages(pkg, type="source", quiet=TRUE)
-            }
-          }
-        }
-        cat("All packages ready!\\n")
-        '''
-        
-        exec_result = container.exec_run(f"Rscript -e '{setup_script}'")
-        if exec_result.exit_code != 0:
-            print(f"Warning: Package installation failed: {exec_result.output.decode()}", file=sys.stderr)
-        else:
-            print("✓ R packages installed in container", file=sys.stderr)
+        print("✓ R packages installed in container", file=sys.stderr)
         
         R_CONTAINER = container.id
         return container
@@ -220,7 +215,19 @@ def execute_r_script_docker(r_code: str, timeout: int = 60) -> tuple[str, str, i
         script_name = f"/tmp/r_script_{uuid.uuid4().hex[:8]}.R"
         
         # Clean up problematic quotes and escape sequences in R code
-        cleaned_r_code = r_code.replace('\\"', '"').replace('\\n', '\n').replace('\\t', '\t')
+        # Remove all escape backslashes that are causing quote problems
+        cleaned_r_code = r_code
+        # Replace escaped quotes with normal quotes
+        cleaned_r_code = cleaned_r_code.replace('\\"', '"')
+        # Replace escaped newlines with actual newlines
+        cleaned_r_code = cleaned_r_code.replace('\\n', '\n')
+        # Replace escaped tabs with actual tabs
+        cleaned_r_code = cleaned_r_code.replace('\\t', '\t')
+        # Handle any other common escape sequences
+        cleaned_r_code = cleaned_r_code.replace('\\r', '\r')
+        
+        print(f"Original R code:\n{r_code}\n", file=sys.stderr)
+        print(f"Cleaned R code:\n{cleaned_r_code}\n", file=sys.stderr)
         
         # Add UTF-8 encoding support to R code
         enhanced_r_code = f"""# Set UTF-8 encoding
