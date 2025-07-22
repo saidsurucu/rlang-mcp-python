@@ -109,7 +109,7 @@ Docker is required for secure R code execution.
         raise RuntimeError("Docker is not installed or not running. Please install Docker to use this MCP server.")
 
 def execute_r_script_docker(r_code: str, timeout: int = 60) -> tuple[str, str, int]:
-    """Execute R script in Docker container (cached client)."""
+    """Execute R script in Docker container with mounted directories."""
     if not check_docker():
         return "", "Docker is not available", -1
     
@@ -121,14 +121,25 @@ def execute_r_script_docker(r_code: str, timeout: int = 60) -> tuple[str, str, i
             script_path = Path(temp_dir) / "script.R"
             script_path.write_text(r_code)
             
+            # Prepare volumes
+            volumes = {
+                temp_dir: {"bind": "/tmp", "mode": "rw"}
+            }
+            
+            # Add mounted directory if available
+            if MOUNTED_DIRECTORY:
+                # Mount the user's directory to /data in container
+                volumes[str(MOUNTED_DIRECTORY)] = {"bind": "/data", "mode": "ro"}
+            
             # Run in container
             result = client.containers.run(
                 "r-base:latest",
                 f"Rscript /tmp/script.R",
-                volumes={temp_dir: {"bind": "/tmp", "mode": "rw"}},
-                working_dir="/tmp",
+                volumes=volumes,
+                working_dir="/data" if MOUNTED_DIRECTORY else "/tmp",
                 remove=True,
-                stderr=True
+                stderr=True,
+                timeout=timeout
             )
             
             output = result.decode('utf-8') if isinstance(result, bytes) else str(result)
@@ -146,12 +157,13 @@ R_SCRIPT_TEMPLATES = {
     "ggplot_base": """
 library(ggplot2)
 library(cowplot)
-setwd("{working_dir}")
+# Container working directory is already set correctly
 {custom_code}
 ggsave("{output_path}", width = {width}/{dpi}, height = {height}/{dpi}, dpi = {dpi})
 """,
     "execute_base": """
-setwd("{working_dir}")
+# Container working directory is already set correctly
+# Files are available in current directory when mounted
 {helper_functions}
 {custom_code}
 """
@@ -241,7 +253,6 @@ def render_ggplot(
         
         script = compile_r_script(
             "ggplot_base",
-            working_dir=get_working_directory(),
             custom_code=code,
             output_path=output_path,
             width=width,
@@ -301,7 +312,6 @@ def execute_r_script(
         # Always use Docker execution
         enhanced_code = compile_r_script(
             "execute_base",
-            working_dir=get_working_directory(),
             helper_functions="",
             custom_code=code
         )
