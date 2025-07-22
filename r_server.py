@@ -801,69 +801,56 @@ def install_r_package(
                 """
             else:
                 install_script = f"""
-                tryCatch({{
-                  cat("Attempting installation of {package_name}\\n")
-                  
-                  # Skip binary installation in Docker - go straight to source
-                  cat("Skipping binary installation (Docker compatibility)\\n")
-                  cat("Step 1: Installing source with dependencies\\n")
-                
-                # Strategy 2: Install common dependencies first
-                common_deps <- c("Rcpp", "RcppArmadillo", "numDeriv", "zoo", "xts")
-                for (dep in common_deps) {{
-                  if (!requireNamespace(dep, quietly = TRUE)) {{
-                    cat("Installing dependency:", dep, "\\n")
-                    tryCatch({{
-                      install.packages(dep, repos="{repo}", type="binary", quiet=TRUE)
-                    }}, error = function(e) {{
-                      if (grepl("type.*binary.*not supported", e$message, ignore.case=TRUE)) {{
-                        cat("Binary not supported for", dep, ", trying source\\n")
-                        install.packages(dep, repos="{repo}", type="source", quiet=TRUE)
-                      }} else {{
-                        cat("Dependency installation error for", dep, ":", e$message, "\\n")
-                      }}
-                    }})
-                  }}
-                }}
-                
-                # Strategy 3: Source installation with compiler flags
-                Sys.setenv(PKG_CPPFLAGS = "-I/opt/homebrew/include -I/usr/local/include")
-                Sys.setenv(PKG_LIBS = "-L/opt/homebrew/lib -L/usr/local/lib")
-                install.packages("{package_name}", repos="{repo}", type="source", quiet=FALSE)
-                
-                if (requireNamespace("{package_name}", quietly = TRUE)) {{
-                  cat("SUCCESS\\n")
-                  cat("Version:", as.character(packageVersion("{package_name}")), "\\n")
-                }} else {{
-                  cat("Step 3: Trying alternative repository\\n")
-                  
-                  # Strategy 4: Try R-universe or other repos
-                  alt_repos <- c("https://cran.microsoft.com/", "https://cloud.r-project.org/")
-                  for (alt_repo in alt_repos) {{
-                    tryCatch({{
-                      install.packages("{package_name}", repos=alt_repo, type="binary", quiet=TRUE)
-                    }}, error = function(e) {{
-                      if (grepl("type.*binary.*not supported", e$message, ignore.case=TRUE)) {{
-                        cat("Binary not supported, trying source from", alt_repo, "\\n")
-                        install.packages("{package_name}", repos=alt_repo, type="source", quiet=TRUE)
-                      }}
-                    }})
-                    if (requireNamespace("{package_name}", quietly = TRUE)) {{
-                      cat("SUCCESS\\n")
-                      cat("Version:", as.character(packageVersion("{package_name}")), "\\n")
-                      break
-                    }}
-                  }}
-                  
-                  if (!requireNamespace("{package_name}", quietly = TRUE)) {{
-                    cat("FAILED\\n")
-                  }}
-                }}
-                  }}
-            }}, error = function(e) {{
-              cat("ERROR:", conditionMessage(e), "\\n")
-            }})
-            """
+tryCatch({{
+  cat("Attempting installation of {package_name}\\n")
+  
+  # Install common dependencies first
+  common_deps <- c("Rcpp", "RcppArmadillo", "numDeriv", "zoo", "xts")
+  for (dep in common_deps) {{
+    if (!requireNamespace(dep, quietly = TRUE)) {{
+      cat("Installing dependency:", dep, "\\n")
+      tryCatch({{
+        install.packages(dep, repos="{repo}", type="source", quiet=TRUE)
+      }}, error = function(e) {{
+        cat("Dependency error for", dep, ":", e$message, "\\n")
+      }})
+    }}
+  }}
+  
+  # Source installation with compiler flags
+  cat("Installing {package_name} from source\\n")
+  Sys.setenv(PKG_CPPFLAGS = "-I/opt/homebrew/include -I/usr/local/include")
+  Sys.setenv(PKG_LIBS = "-L/opt/homebrew/lib -L/usr/local/lib")
+  install.packages("{package_name}", repos="{repo}", type="source", quiet=FALSE)
+  
+  if (requireNamespace("{package_name}", quietly = TRUE)) {{
+    cat("SUCCESS\\n")
+    cat("Version:", as.character(packageVersion("{package_name}")), "\\n")
+  }} else {{
+    # Try alternative repositories
+    cat("Trying alternative repositories\\n")
+    alt_repos <- c("https://cran.microsoft.com/", "https://cloud.r-project.org/")
+    for (alt_repo in alt_repos) {{
+      tryCatch({{
+        install.packages("{package_name}", repos=alt_repo, type="source", quiet=TRUE)
+        if (requireNamespace("{package_name}", quietly = TRUE)) {{
+          cat("SUCCESS\\n")
+          cat("Version:", as.character(packageVersion("{package_name}")), "\\n")
+          break
+        }}
+      }}, error = function(e) {{
+        cat("Alternative repo error:", e$message, "\\n")
+      }})
+    }}
+    
+    if (!requireNamespace("{package_name}", quietly = TRUE)) {{
+      cat("FAILED\\n")
+    }}
+  }}
+}}, error = function(e) {{
+  cat("ERROR:", conditionMessage(e), "\\n")
+}})
+"""
         
         # Execute installation
         install_result = subprocess.run(
