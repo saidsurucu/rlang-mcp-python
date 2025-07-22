@@ -425,6 +425,14 @@ def render_ggplot(
 ) -> dict:
     """Render a ggplot2 visualization from R code using Docker."""
     
+    # Check if container is ready
+    global R_CONTAINER
+    if not R_CONTAINER:
+        return {
+            "success": False,
+            "message": "R container not initialized. Please run initialize_r_container first."
+        }
+    
     # Check cache first
     if use_cache:
         cache_key = get_cache_key("render_ggplot", {
@@ -493,6 +501,17 @@ def execute_r_script(
     timeout: int = 60
 ) -> dict:
     """Execute an R script and return the text output using Docker."""
+    
+    # Check if container is ready
+    global R_CONTAINER
+    if not R_CONTAINER:
+        return {
+            "success": False,
+            "returncode": -1,
+            "stdout": "",
+            "stderr": "R container not initialized. Please run initialize_r_container first.",
+            "summary": "Container not ready"
+        }
     
     # Check cache first
     cache_key = get_cache_key("execute_r", {"code": code})
@@ -605,6 +624,81 @@ def list_files(pattern: str = "*", file_type: str = "all") -> dict:
             "message": f"Error: {str(e)}"
         }
 
+# Docker container management tool
+@mcp.tool
+def initialize_r_container() -> dict:
+    """Initialize and setup the R Docker container with all required packages."""
+    global R_CONTAINER
+    
+    try:
+        # Clean up any existing container first
+        if R_CONTAINER:
+            try:
+                client = docker.from_env()
+                container = client.containers.get(R_CONTAINER)
+                container.remove(force=True)
+                print("✓ Cleaned up existing container", file=sys.stderr)
+            except:
+                pass
+            finally:
+                R_CONTAINER = None
+        
+        # Create new container
+        container = get_or_create_r_container()
+        
+        return {
+            "success": True,
+            "container_id": container.id[:12],
+            "message": "R container initialized successfully",
+            "status": "ready"
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to initialize R container",
+            "status": "failed"
+        }
+
+@mcp.tool
+def container_status() -> dict:
+    """Check the status of the R Docker container."""
+    global R_CONTAINER
+    
+    if not R_CONTAINER:
+        return {
+            "status": "not_initialized",
+            "message": "No R container is currently running",
+            "container_id": None
+        }
+    
+    try:
+        client = docker.from_env()
+        container = client.containers.get(R_CONTAINER)
+        
+        return {
+            "status": container.status,
+            "container_id": container.id[:12],
+            "image": container.image.tags[0] if container.image.tags else "unknown",
+            "message": f"Container is {container.status}",
+            "uptime": container.attrs.get("State", {}).get("StartedAt", "unknown")
+        }
+        
+    except docker.errors.NotFound:
+        R_CONTAINER = None
+        return {
+            "status": "not_found",
+            "message": "Container was removed externally",
+            "container_id": None
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Error checking container: {str(e)}",
+            "container_id": R_CONTAINER[:12] if R_CONTAINER else None
+        }
+
 # Additional tool implementations
 
 @mcp.tool
@@ -641,21 +735,26 @@ def file_info(filename: str) -> dict:
         # Docker execution for Excel info
         additional_info = {}
         if file_path.suffix.lower() in ['.xlsx', '.xls']:
-            try:
-                r_script = f'''
-                library(readxl)
-                file_path <- "{file_path}"
-                sheets <- excel_sheets(file_path)
-                cat("SHEETS:", paste(sheets, collapse=","), "\\n")
-                '''
-                
-                stdout, stderr, returncode = execute_r_script_docker(r_script, timeout=10)
-                
-                if returncode == 0 and "SHEETS:" in stdout:
-                    sheets = stdout.split("SHEETS:")[1].split("\\n")[0].strip()
-                    additional_info["excel_sheets"] = sheets.split(",") if sheets else []
-            except:
-                additional_info["excel_info"] = "Could not read Excel file details"
+            # Check if container is ready for Excel analysis
+            global R_CONTAINER
+            if not R_CONTAINER:
+                additional_info["excel_info"] = "R container not initialized - run initialize_r_container for Excel analysis"
+            else:
+                try:
+                    r_script = f'''
+                    library(readxl)
+                    file_path <- "{file_path}"
+                    sheets <- excel_sheets(file_path)
+                    cat("SHEETS:", paste(sheets, collapse=","), "\\n")
+                    '''
+                    
+                    stdout, stderr, returncode = execute_r_script_docker(r_script, timeout=10)
+                    
+                    if returncode == 0 and "SHEETS:" in stdout:
+                        sheets = stdout.split("SHEETS:")[1].split("\\n")[0].strip()
+                        additional_info["excel_sheets"] = sheets.split(",") if sheets else []
+                except:
+                    additional_info["excel_info"] = "Could not read Excel file details"
         
         return {
             "success": True,
@@ -684,6 +783,16 @@ def install_r_package(
     repo: str = "https://cran.r-project.org"
 ) -> dict:
     """Install an R package using Docker. Note: Common packages are auto-installed in execute_r_script."""
+    
+    # Check if container is ready
+    global R_CONTAINER
+    if not R_CONTAINER:
+        return {
+            "success": False,
+            "package": package_name,
+            "message": "R container not initialized. Please run initialize_r_container first."
+        }
+    
     if not package_name or not package_name.replace(".", "").replace("_", "").isalnum():
         return {
             "success": False,
@@ -740,6 +849,17 @@ def list_r_packages(
     pattern: str = ""
 ) -> dict:
     """List R packages using Docker."""
+    
+    # Check if container is ready
+    global R_CONTAINER
+    if not R_CONTAINER:
+        return {
+            "success": False,
+            "packages": [],
+            "count": 0,
+            "message": "R container not initialized. Please run initialize_r_container first."
+        }
+    
     list_script = f'''
     installed <- as.data.frame(installed.packages())
     if ("{pattern}" != "") {{
