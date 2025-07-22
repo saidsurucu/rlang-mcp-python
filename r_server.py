@@ -18,7 +18,6 @@ import subprocess
 import sys
 import tempfile
 import time
-from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional, Literal, Dict, Any
@@ -42,8 +41,6 @@ CACHE_TTL = 3600  # Cache time-to-live in seconds
 result_cache: Dict[str, Any] = {}
 cache_timestamps: Dict[str, float] = {}
 
-# Thread pool for async operations
-executor = ThreadPoolExecutor(max_workers=4)
 
 # No session pooling - always use Docker for isolation
 
@@ -212,8 +209,10 @@ def mount_directory(directory_path: str) -> dict:
     except Exception as e:
         return {"success": False, "message": f"Failed to mount: {str(e)}"}
 
+
+# Main synchronous tools (FastMCP works better with sync)
 @mcp.tool
-async def render_ggplot_async(
+def render_ggplot(
     code: str,
     output_type: Literal["png", "jpeg", "pdf", "svg"] = "png",
     width: int = 800,
@@ -221,9 +220,9 @@ async def render_ggplot_async(
     resolution: int = 96,
     use_cache: bool = True
 ) -> dict:
-    """Async version of render_ggplot with caching."""
+    """Render a ggplot2 visualization from R code using Docker."""
     
-    # Check cache
+    # Check cache first
     if use_cache:
         cache_key = get_cache_key("render_ggplot", {
             "code": code,
@@ -235,7 +234,6 @@ async def render_ggplot_async(
         cached = get_cached_result(cache_key)
         if cached:
             return cached
-    
     
     # Compile script from template
     with tempfile.TemporaryDirectory(prefix="ggplot-") as temp_dir:
@@ -251,14 +249,8 @@ async def render_ggplot_async(
             dpi=resolution
         )
         
-        # Execute with Docker (mandatory)
-        loop = asyncio.get_event_loop()
-        stdout, stderr, returncode = await loop.run_in_executor(
-            executor,
-            execute_r_script_docker,
-            script,
-            30
-        )
+        # Execute with Docker
+        stdout, stderr, returncode = execute_r_script_docker(script, 30)
         
         if returncode != 0:
             raise RuntimeError(f"R script failed: {stderr}")
@@ -292,15 +284,14 @@ async def render_ggplot_async(
         
         return result
 
-
 @mcp.tool
-async def execute_r_script_async(
+def execute_r_script(
     code: str,
     timeout: int = 60
 ) -> dict:
-    """Execute R script asynchronously with session pooling."""
+    """Execute an R script and return the text output using Docker."""
     
-    # Check cache
+    # Check cache first
     cache_key = get_cache_key("execute_r", {"code": code})
     cached = get_cached_result(cache_key)
     if cached:
@@ -315,13 +306,7 @@ async def execute_r_script_async(
             custom_code=code
         )
         
-        loop = asyncio.get_event_loop()
-        stdout, stderr, returncode = await loop.run_in_executor(
-            executor,
-            execute_r_script_docker,
-            enhanced_code,
-            timeout
-        )
+        stdout, stderr, returncode = execute_r_script_docker(enhanced_code, timeout)
         
         result = {
             "success": returncode == 0,
@@ -342,31 +327,6 @@ async def execute_r_script_async(
             "stderr": str(e),
             "summary": "Execution failed"
         }
-
-# Backward compatibility wrappers
-@mcp.tool
-def render_ggplot(
-    code: str,
-    output_type: Literal["png", "jpeg", "pdf", "svg"] = "png",
-    width: int = 800,
-    height: int = 600,
-    resolution: int = 96,
-    use_cache: bool = True
-) -> dict:
-    """Backward compatible wrapper for render_ggplot_async."""
-    return asyncio.run(render_ggplot_async(
-        code, output_type, width, height, resolution, use_cache
-    ))
-
-@mcp.tool
-def execute_r_script(
-    code: str,
-    timeout: int = 60
-) -> dict:
-    """Backward compatible wrapper for execute_r_script_async."""
-    return asyncio.run(execute_r_script_async(
-        code, timeout
-    ))
 
 def get_working_directory():
     """Get the current working directory for R operations."""
@@ -611,8 +571,8 @@ def list_r_packages(
         "message": f"Found {len(packages)} packages"
     }
 
-async def initialize_server():
-    """Initialize the optimized server."""
+def initialize_server():
+    """Initialize the server."""
     print("Initializing R-Server MCP with Docker...", file=sys.stderr)
     
     # Ensure Docker is available
@@ -636,7 +596,7 @@ async def initialize_server():
 
 if __name__ == "__main__":
     # Run initialization
-    asyncio.run(initialize_server())
+    initialize_server()
     
     # Start MCP server
     mcp.run()
