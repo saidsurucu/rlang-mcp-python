@@ -144,12 +144,21 @@ def get_or_create_r_container():
         
         print("Creating persistent R container...", file=sys.stderr)
         
-        # Try to use rocker/tidyverse (has common packages pre-installed)
-        images_to_try = ["rocker/tidyverse:latest", "r-base:latest"]
+        # Try to pull and use rocker/tidyverse first (has readxl and common packages pre-installed)
+        images_to_try = ["rocker/tidyverse:devel", "rocker/tidyverse:latest", "r-base:latest"]
         container = None
         
         for image in images_to_try:
             try:
+                # Try to pull the image first
+                try:
+                    client.images.get(image)
+                    print(f"✓ Image {image} found locally", file=sys.stderr)
+                except docker.errors.ImageNotFound:
+                    print(f"Pulling {image}...", file=sys.stderr)
+                    client.images.pull(image)
+                    print(f"✓ Image {image} pulled successfully", file=sys.stderr)
+                
                 container = client.containers.run(
                     image,
                     command="tail -f /dev/null",  # Keep container alive
@@ -161,7 +170,7 @@ def get_or_create_r_container():
                 print(f"✓ Using {image}", file=sys.stderr)
                 break
             except docker.errors.ImageNotFound:
-                print(f"Image {image} not found, trying next...", file=sys.stderr)
+                print(f"Image {image} not available, trying next...", file=sys.stderr)
                 continue
             except Exception as e:
                 print(f"Failed to use {image}: {e}", file=sys.stderr)
@@ -170,33 +179,51 @@ def get_or_create_r_container():
         if not container:
             raise RuntimeError("Could not create container with any available image")
         
-        # Install common packages in the persistent container (using binary packages)
-        # Create the R setup script without single quotes to avoid shell issues
-        setup_commands = [
-            'options(repos = c(CRAN = "https://cloud.r-project.org/"))',
-            'cat("Installing common R packages...\\n")',
-            'packages <- c("readxl", "writexl", "dplyr", "tidyr", "ggplot2", "cowplot")',
-            'system("apt-get update > /dev/null 2>&1", ignore.stderr=TRUE, ignore.stdout=TRUE)',
-            'system("apt-get install -y r-cran-readxl r-cran-dplyr r-cran-tidyr r-cran-ggplot2 > /dev/null 2>&1", ignore.stderr=TRUE, ignore.stdout=TRUE)',
-            'for(pkg in packages) {',
-            '  if(!require(pkg, character.only=TRUE, quietly=TRUE)) {',
-            '    cat("Installing", pkg, "from CRAN...\\n")',
-            '    install.packages(pkg, type="binary", quiet=TRUE)',
-            '    if(!require(pkg, character.only=TRUE, quietly=TRUE)) {',
-            '      install.packages(pkg, type="source", quiet=TRUE)',
-            '    }',
-            '  }',
-            '}',
-            'cat("All packages ready!\\n")'
-        ]
+        # Check what image we're using and install packages accordingly
+        image_name = container.image.tags[0] if container.image.tags else "unknown"
         
-        # Execute each command separately to avoid quote issues
+        if "tidyverse" in image_name:
+            # rocker/tidyverse already has most packages, just check they're available
+            print("✓ Using rocker/tidyverse - most packages pre-installed", file=sys.stderr)
+            setup_commands = [
+                'cat("Checking R packages availability...\\n")',
+                'packages <- c("readxl", "writexl", "dplyr", "tidyr", "ggplot2")',
+                'for(pkg in packages) {',
+                '  if(!require(pkg, character.only=TRUE, quietly=TRUE)) {',
+                '    cat("Installing missing package:", pkg, "\\n")',
+                '    install.packages(pkg, quiet=TRUE)',
+                '  }',
+                '}',
+                'cat("All packages ready!\\n")'
+            ]
+        else:
+            # r-base image needs full package installation
+            print("Using r-base - installing packages...", file=sys.stderr)
+            setup_commands = [
+                'options(repos = c(CRAN = "https://cloud.r-project.org/"))',
+                'cat("Installing common R packages...\\n")',
+                'packages <- c("readxl", "writexl", "dplyr", "tidyr", "ggplot2", "cowplot")',
+                'system("apt-get update > /dev/null 2>&1", ignore.stderr=TRUE, ignore.stdout=TRUE)',
+                'system("apt-get install -y r-cran-readxl r-cran-dplyr r-cran-tidyr r-cran-ggplot2 > /dev/null 2>&1", ignore.stderr=TRUE, ignore.stdout=TRUE)',
+                'for(pkg in packages) {',
+                '  if(!require(pkg, character.only=TRUE, quietly=TRUE)) {',
+                '    cat("Installing", pkg, "from CRAN...\\n")',
+                '    install.packages(pkg, type="binary", quiet=TRUE)',
+                '    if(!require(pkg, character.only=TRUE, quietly=TRUE)) {',
+                '      install.packages(pkg, type="source", quiet=TRUE)',
+                '    }',
+                '  }',
+                '}',
+                'cat("All packages ready!\\n")'
+            ]
+        
+        # Execute setup commands
         for cmd in setup_commands:
             exec_result = container.exec_run(["Rscript", "-e", cmd])
             if exec_result.exit_code != 0 and "require" not in cmd and "install.packages" not in cmd:
                 print(f"Warning: Command failed: {cmd}: {exec_result.output.decode()}", file=sys.stderr)
         
-        print("✓ R packages installed in container", file=sys.stderr)
+        print("✓ R packages ready in container", file=sys.stderr)
         
         R_CONTAINER = container.id
         return container
@@ -226,8 +253,7 @@ def execute_r_script_docker(r_code: str, timeout: int = 60) -> tuple[str, str, i
         # Handle any other common escape sequences
         cleaned_r_code = cleaned_r_code.replace('\\r', '\r')
         
-        print(f"Original R code:\n{r_code}\n", file=sys.stderr)
-        print(f"Cleaned R code:\n{cleaned_r_code}\n", file=sys.stderr)
+# Debug messages removed for cleaner output
         
         # Add UTF-8 encoding support to R code
         enhanced_r_code = f"""# Set UTF-8 encoding
