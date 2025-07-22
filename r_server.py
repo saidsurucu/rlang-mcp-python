@@ -859,7 +859,7 @@ def install_r_package(
                     cat("FAILED\\n")
                   }}
                 }}
-              }}
+                  }}
             }}, error = function(e) {{
               cat("ERROR:", conditionMessage(e), "\\n")
             }})
