@@ -143,27 +143,58 @@ def get_or_create_r_container():
             working_dir = "/data"
         
         print("Creating persistent R container...", file=sys.stderr)
-        container = client.containers.run(
-            "r-base:latest",
-            command="tail -f /dev/null",  # Keep container alive
-            volumes=volumes,
-            working_dir=working_dir,
-            detach=True,
-            remove=False
-        )
         
-        # Install common packages in the persistent container
+        # Try to use rocker/tidyverse (has common packages pre-installed)
+        images_to_try = ["rocker/tidyverse:latest", "r-base:latest"]
+        container = None
+        
+        for image in images_to_try:
+            try:
+                container = client.containers.run(
+                    image,
+                    command="tail -f /dev/null",  # Keep container alive
+                    volumes=volumes,
+                    working_dir=working_dir,
+                    detach=True,
+                    remove=False
+                )
+                print(f"✓ Using {image}", file=sys.stderr)
+                break
+            except docker.errors.ImageNotFound:
+                print(f"Image {image} not found, trying next...", file=sys.stderr)
+                continue
+            except Exception as e:
+                print(f"Failed to use {image}: {e}", file=sys.stderr)
+                continue
+        
+        if not container:
+            raise RuntimeError("Could not create container with any available image")
+        
+        # Install common packages in the persistent container (using binary packages)
         setup_script = '''
-        # Install common packages once
-        cat("Installing common R packages...\\n")
+        # Use faster binary packages when available
+        options(repos = c(CRAN = "https://cloud.r-project.org/"))
+        
+        # Install common packages once (prefer binary)
+        cat("Installing common R packages (binary when available)...\\n")
         packages <- c("readxl", "writexl", "dplyr", "tidyr", "ggplot2", "cowplot")
+        
+        # Try to install from Ubuntu repos first (fastest)
+        system("apt-get update > /dev/null 2>&1", ignore.stderr=TRUE, ignore.stdout=TRUE)
+        system("apt-get install -y r-cran-readxl r-cran-dplyr r-cran-tidyr r-cran-ggplot2 > /dev/null 2>&1", ignore.stderr=TRUE, ignore.stdout=TRUE)
+        
+        # Install any remaining packages from CRAN
         for(pkg in packages) {
           if(!require(pkg, character.only=TRUE, quietly=TRUE)) {
-            cat("Installing", pkg, "...\\n")
-            install.packages(pkg, repos="https://cran.r-project.org", quiet=TRUE)
+            cat("Installing", pkg, "from CRAN...\\n")
+            install.packages(pkg, type="binary", quiet=TRUE)
+            # If binary fails, try source but don't wait too long
+            if(!require(pkg, character.only=TRUE, quietly=TRUE)) {
+              install.packages(pkg, type="source", quiet=TRUE)
+            }
           }
         }
-        cat("All packages installed!\\n")
+        cat("All packages ready!\\n")
         '''
         
         exec_result = container.exec_run(f"Rscript -e '{setup_script}'")
