@@ -121,6 +121,37 @@ uvx --from git+https://github.com/saidsurucu/rlang-mcp-python rlang-mcp-python
 git clone https://github.com/saidsurucu/rlang-mcp-python.git
 cd rlang-mcp-python
 uv sync
+```
+
+## Claude Desktop Integration
+
+To use this MCP server with Claude Desktop:
+
+1. Open Claude Desktop
+2. Go to **Settings** > **Developer** > **Edit Config**
+3. Add this configuration to your MCP servers:
+
+```json
+{
+  "mcpServers": {
+    "r-server-python": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/saidsurucu/rlang-mcp-python",
+        "rlang-mcp-python"
+      ],
+      "disabled": false
+    }
+  }
+}
+```
+
+4. Save the configuration
+5. Restart Claude Desktop
+6. The R-Server tools will now be available in your Claude conversations
+
+```bash
 
 # Method 3: Install with pip
 pip install git+https://github.com/saidsurucu/rlang-mcp-python

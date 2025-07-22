@@ -132,6 +132,34 @@ uv sync
 pip install git+https://github.com/saidsurucu/rlang-mcp-python
 ```
 
+## Claude Desktop Entegrasyonu
+
+Bu MCP sunucusunu Claude Desktop ile kullanmak için:
+
+1. Claude Desktop'ı açın
+2. **Ayarlar** > **Developer** > **Edit Config** menüsüne gidin
+3. MCP sunucularınıza bu yapılandırmayı ekleyin:
+
+```json
+{
+  "mcpServers": {
+    "r-server-python": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/saidsurucu/rlang-mcp-python",
+        "rlang-mcp-python"
+      ],
+      "disabled": false
+    }
+  }
+}
+```
+
+4. Yapılandırmayı kaydedin
+5. Claude Desktop'ı yeniden başlatın
+6. R-Server araçları artık Claude sohbetlerinizde kullanılabilir olacak
+
 ### Sistem Gereksinimleri
 
 - **Python 3.12+**
