@@ -683,7 +683,8 @@ def install_r_package(
     package_name: str,
     version: str = "",
     repo: str = "https://cran.r-project.org",
-    force_reinstall: bool = False
+    force_reinstall: bool = False,
+    force_source: bool = False
 ) -> dict:
     """
     Install an R package.
@@ -693,6 +694,7 @@ def install_r_package(
         version: Specific version to install (optional, e.g., "1.0.0")
         repo: Repository URL (default: CRAN)
         force_reinstall: Reinstall even if package exists
+        force_source: Skip binary installation and force source compilation
     
     Returns:
         Dictionary with installation status and details
@@ -763,18 +765,61 @@ def install_r_package(
             """
         else:
             # Install latest version with robust strategy
-            install_script = f"""
-            tryCatch({{
-              cat("Attempting installation of {package_name}\\n")
-              
-              # Strategy 1: Try binary installation first (fastest)
-              cat("Step 1: Trying binary installation\\n")
-              install.packages("{package_name}", repos="{repo}", type="binary", quiet=TRUE)
-              
-              if (requireNamespace("{package_name}", quietly = TRUE)) {{
-                cat("SUCCESS\\n")
-                cat("Version:", as.character(packageVersion("{package_name}")), "\\n")
-              }} else {{
+            if force_source:
+                # Skip binary installation and go straight to source
+                install_script = f"""
+                tryCatch({{
+                  cat("Force source installation requested for {package_name}\\n")
+                  
+                  # Install common dependencies first
+                  common_deps <- c("Rcpp", "RcppArmadillo", "numDeriv", "zoo", "xts")
+                  for (dep in common_deps) {{
+                    if (!requireNamespace(dep, quietly = TRUE)) {{
+                      cat("Installing dependency:", dep, "\\n")
+                      tryCatch({{
+                        install.packages(dep, repos="{repo}", type="source", quiet=TRUE)
+                      }}, error = function(e) {{
+                        cat("Dependency installation error for", dep, ":", e$message, "\\n")
+                      }})
+                    }}
+                  }}
+                  
+                  # Source installation with compiler flags
+                  Sys.setenv(PKG_CPPFLAGS = "-I/opt/homebrew/include -I/usr/local/include")
+                  Sys.setenv(PKG_LIBS = "-L/opt/homebrew/lib -L/usr/local/lib")
+                  install.packages("{package_name}", repos="{repo}", type="source", quiet=FALSE)
+                  
+                  if (requireNamespace("{package_name}", quietly = TRUE)) {{
+                    cat("SUCCESS\\n")
+                    cat("Version:", as.character(packageVersion("{package_name}")), "\\n")
+                  }} else {{
+                    cat("FAILED\\n")
+                  }}
+                }}, error = function(e) {{
+                  cat("ERROR:", conditionMessage(e), "\\n")
+                }})
+                """
+            else:
+                install_script = f"""
+                tryCatch({{
+                  cat("Attempting installation of {package_name}\\n")
+                  
+                  # Strategy 1: Try binary installation first (fastest)
+                  cat("Step 1: Trying binary installation\\n")
+                  tryCatch({{
+                    install.packages("{package_name}", repos="{repo}", type="binary", quiet=TRUE)
+                  }}, error = function(e) {{
+                    if (grepl("type.*binary.*not supported", e$message, ignore.case=TRUE)) {{
+                      cat("Binary installation not supported on this platform, skipping to source\\n")
+                    }} else {{
+                      cat("Binary installation error:", e$message, "\\n")
+                    }}
+                  }})
+                  
+                  if (requireNamespace("{package_name}", quietly = TRUE)) {{
+                    cat("SUCCESS\\n")
+                    cat("Version:", as.character(packageVersion("{package_name}")), "\\n")
+                  }} else {{
                 cat("Step 2: Binary failed, trying source with dependencies\\n")
                 
                 # Strategy 2: Install common dependencies first
@@ -782,7 +827,16 @@ def install_r_package(
                 for (dep in common_deps) {{
                   if (!requireNamespace(dep, quietly = TRUE)) {{
                     cat("Installing dependency:", dep, "\\n")
-                    install.packages(dep, repos="{repo}", type="binary", quiet=TRUE)
+                    tryCatch({{
+                      install.packages(dep, repos="{repo}", type="binary", quiet=TRUE)
+                    }}, error = function(e) {{
+                      if (grepl("type.*binary.*not supported", e$message, ignore.case=TRUE)) {{
+                        cat("Binary not supported for", dep, ", trying source\\n")
+                        install.packages(dep, repos="{repo}", type="source", quiet=TRUE)
+                      }} else {{
+                        cat("Dependency installation error for", dep, ":", e$message, "\\n")
+                      }}
+                    }})
                   }}
                 }}
                 
@@ -800,7 +854,14 @@ def install_r_package(
                   # Strategy 4: Try R-universe or other repos
                   alt_repos <- c("https://cran.microsoft.com/", "https://cloud.r-project.org/")
                   for (alt_repo in alt_repos) {{
-                    install.packages("{package_name}", repos=alt_repo, type="binary", quiet=TRUE)
+                    tryCatch({{
+                      install.packages("{package_name}", repos=alt_repo, type="binary", quiet=TRUE)
+                    }}, error = function(e) {{
+                      if (grepl("type.*binary.*not supported", e$message, ignore.case=TRUE)) {{
+                        cat("Binary not supported, trying source from", alt_repo, "\\n")
+                        install.packages("{package_name}", repos=alt_repo, type="source", quiet=TRUE)
+                      }}
+                    }})
                     if (requireNamespace("{package_name}", quietly = TRUE)) {{
                       cat("SUCCESS\\n")
                       cat("Version:", as.character(packageVersion("{package_name}")), "\\n")
