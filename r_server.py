@@ -186,43 +186,52 @@ def get_or_create_r_container():
         if "tidyverse" in image_name:
             # rocker/tidyverse already has most packages, just check they're available
             print("✓ Using rocker/tidyverse - most packages pre-installed", file=sys.stderr)
-            setup_commands = [
-                'cat("Checking R packages availability...\\n")',
-                'packages <- c("readxl", "writexl", "dplyr", "tidyr", "ggplot2")',
-                'for(pkg in packages) {',
-                '  if(!require(pkg, character.only=TRUE, quietly=TRUE)) {',
-                '    cat("Installing missing package:", pkg, "\\n")',
-                '    install.packages(pkg, quiet=TRUE)',
-                '  }',
-                '}',
-                'cat("All packages ready!\\n")'
-            ]
+            tidyverse_script = '''
+            cat("Checking R packages availability...\\n")
+            packages <- c("readxl", "writexl", "dplyr", "tidyr", "ggplot2")
+            for(pkg in packages) {
+              if(!require(pkg, character.only=TRUE, quietly=TRUE)) {
+                cat("Installing missing package:", pkg, "\\n")
+                install.packages(pkg, quiet=TRUE)
+              }
+            }
+            cat("All packages ready!\\n")
+            '''
+            
+            # Execute the complete script as one command
+            exec_result = container.exec_run(["Rscript", "-e", tidyverse_script])
+            if exec_result.exit_code != 0:
+                print(f"Warning: Package check failed: {exec_result.output.decode()}", file=sys.stderr)
         else:
             # r-base image needs full package installation
             print("Using r-base - installing packages...", file=sys.stderr)
-            setup_commands = [
-                'options(repos = c(CRAN = "https://cloud.r-project.org/"))',
-                'cat("Installing common R packages...\\n")',
-                'packages <- c("readxl", "writexl", "dplyr", "tidyr", "ggplot2", "cowplot")',
-                'system("apt-get update > /dev/null 2>&1", ignore.stderr=TRUE, ignore.stdout=TRUE)',
-                'system("apt-get install -y r-cran-readxl r-cran-dplyr r-cran-tidyr r-cran-ggplot2 > /dev/null 2>&1", ignore.stderr=TRUE, ignore.stdout=TRUE)',
-                'for(pkg in packages) {',
-                '  if(!require(pkg, character.only=TRUE, quietly=TRUE)) {',
-                '    cat("Installing", pkg, "from CRAN...\\n")',
-                '    install.packages(pkg, type="binary", quiet=TRUE)',
-                '    if(!require(pkg, character.only=TRUE, quietly=TRUE)) {',
-                '      install.packages(pkg, type="source", quiet=TRUE)',
-                '    }',
-                '  }',
-                '}',
-                'cat("All packages ready!\\n")'
-            ]
-        
-        # Execute setup commands
-        for cmd in setup_commands:
-            exec_result = container.exec_run(["Rscript", "-e", cmd])
-            if exec_result.exit_code != 0 and "require" not in cmd and "install.packages" not in cmd:
-                print(f"Warning: Command failed: {cmd}: {exec_result.output.decode()}", file=sys.stderr)
+            # Create a complete R script and execute it as one piece
+            full_script = '''
+            options(repos = c(CRAN = "https://cloud.r-project.org/"))
+            cat("Installing common R packages...\\n")
+            
+            # Try system packages first (faster)
+            system("apt-get update > /dev/null 2>&1", ignore.stderr=TRUE, ignore.stdout=TRUE)
+            system("apt-get install -y r-cran-readxl r-cran-dplyr r-cran-tidyr r-cran-ggplot2 > /dev/null 2>&1", ignore.stderr=TRUE, ignore.stdout=TRUE)
+            
+            # Install remaining packages from CRAN
+            packages <- c("readxl", "writexl", "dplyr", "tidyr", "ggplot2", "cowplot")
+            for(pkg in packages) {
+              if(!require(pkg, character.only=TRUE, quietly=TRUE)) {
+                cat("Installing", pkg, "from CRAN...\\n")
+                install.packages(pkg, type="binary", quiet=TRUE)
+                if(!require(pkg, character.only=TRUE, quietly=TRUE)) {
+                  install.packages(pkg, type="source", quiet=TRUE)
+                }
+              }
+            }
+            cat("All packages ready!\\n")
+            '''
+            
+            # Execute the complete script as one command
+            exec_result = container.exec_run(["Rscript", "-e", full_script])
+            if exec_result.exit_code != 0:
+                print(f"Warning: Package installation failed: {exec_result.output.decode()}", file=sys.stderr)
         
         print("✓ R packages ready in container", file=sys.stderr)
         
