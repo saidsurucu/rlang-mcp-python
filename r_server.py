@@ -211,13 +211,29 @@ def get_or_create_r_container():
         raise
 
 def execute_r_script_docker(r_code: str, timeout: int = 60) -> tuple[str, str, int]:
-    """Execute R script in persistent Docker container."""
+    """Execute R script in persistent Docker container using file approach."""
     try:
         container = get_or_create_r_container()
         
-        # Execute R script in the persistent container
-        r_command = f"Rscript -e '{r_code}'"
-        exec_result = container.exec_run(r_command)
+        # Create a temporary R script file in the container
+        import uuid
+        script_name = f"/tmp/r_script_{uuid.uuid4().hex[:8]}.R"
+        
+        # Write R code to file in container
+        create_file_result = container.exec_run([
+            "sh", "-c", f"cat > {script_name}"
+        ], stdin=r_code.encode('utf-8'))
+        
+        if create_file_result.exit_code != 0:
+            return "", f"Failed to create R script file: {create_file_result.output.decode()}", -1
+        
+        # Execute the R script file
+        exec_result = container.exec_run([
+            "Rscript", script_name
+        ])
+        
+        # Clean up the temporary file
+        container.exec_run(["rm", script_name])
         
         output = exec_result.output.decode('utf-8') if exec_result.output else ""
         return output, "", exec_result.exit_code
