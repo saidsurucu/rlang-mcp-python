@@ -1,14 +1,16 @@
 # Python R-Server MCP
 
-A comprehensive Model Context Protocol (MCP) server for R data visualization and analysis, built with Python and FastMCP.
+A secure, Docker-based Model Context Protocol (MCP) server for R data visualization and analysis, built with Python and FastMCP.
 
-**What is this?** This tool allows you to perform statistical analysis in R through natural language conversations with LLM models like Claude. Instead of writing R code manually, you can simply describe what analysis you want, and the AI will execute R scripts, create visualizations, and analyze your data for you.
+**What is this?** This tool allows you to perform statistical analysis in R through natural language conversations with LLM models like Claude. All R code is executed in secure Docker containers, ensuring complete isolation and security.
 
 **Key Benefits:**
 - 🗣️ **Natural Language Interface**: Chat with AI to perform complex statistical analyses
+- 🐳 **Secure Docker Execution**: All R code runs in isolated containers for maximum security
 - 📊 **Automatic R Execution**: AI runs R code and returns results without you writing code
 - 📁 **Direct File Access**: Mount local directories so AI can work with your Excel/CSV files
 - 📈 **Publication-Ready Plots**: Generate professional ggplot2 visualizations through conversation
+- ⚡ **Smart Caching**: Results are cached for instant repeated operations
 - 🔄 **Interactive Analysis**: Ask follow-up questions and refine your analysis iteratively
 
 *🌐 [Türkçe](README_TR.md) | **English***
@@ -37,15 +39,16 @@ This project is inspired by [gdbelvin's rlang-mcp-server](https://github.com/gdb
 - **Automatic Dependencies**: Smart package dependency resolution
 
 ### 🛡️ **Security & Isolation**
-- **Docker Support**: Required containerized execution for enhanced security
+- **Mandatory Docker**: All R code execution in isolated containers
 - **Path Sanitization**: Protection against directory traversal attacks
 - **File Access Control**: Secure file system access with proper permission checks
+- **Container Isolation**: Complete process and filesystem isolation
 
-### 🚀 **Developer Experience**
+### 🚀 **Performance & Experience**
 - **FastMCP Framework**: Modern Python MCP implementation with excellent performance
+- **Smart Caching**: In-memory caching for instant repeated operations
+- **Async Execution**: Non-blocking operations for better responsiveness
 - **uv Package Manager**: Lightning-fast dependency management and virtual environments
-- **Comprehensive Testing**: Full test suite with integration and unit tests
-- **Rich Documentation**: Detailed API documentation and usage examples
 
 ## Quick Start
 
@@ -159,9 +162,10 @@ pip install git+https://github.com/saidsurucu/rlang-mcp-python
 ### System Requirements
 
 - **Python 3.12+**
-- **R 4.0+** (packages are installed automatically)
+- **Docker** (mandatory - all R execution happens in containers)
 - **uv** (recommended) or pip for package management
-- **Docker** (required for secure containerized execution)
+
+**Note**: Local R installation is not required - all R execution happens inside Docker containers.
 
 ### Running the Server
 
@@ -283,15 +287,21 @@ Here's how you might interact with Claude for a full analysis:
 
 ## Docker Support
 
-Docker is required for secure execution:
+Docker is mandatory and will be automatically checked on startup:
 
 ```bash
-# Build Docker image
-docker build -f Dockerfile.python -t r-server-mcp .
+# Ensure Docker is running
+docker --version
 
-# Run with Docker Compose
-docker-compose -f docker-compose.python.yml up
+# The R base image will be automatically pulled on first use
+# Or you can pre-pull it:
+docker pull r-base:latest
 ```
+
+The server will automatically:
+1. Check if Docker is running
+2. Pull the R base image if needed
+3. Execute all R code in isolated containers
 
 ## Development
 

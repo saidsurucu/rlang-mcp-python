@@ -1,14 +1,16 @@
 # Python R-Server MCP
 
-R veri görselleştirmesi ve analizi için Python ve FastMCP ile geliştirilmiş kapsamlı bir Model Context Protocol (MCP) sunucusu.
+R veri görselleştirmesi ve analizi için Python ve FastMCP ile geliştirilmiş güvenli, Docker tabanlı Model Context Protocol (MCP) sunucusu.
 
-**Bu nedir?** Bu araç, Claude gibi LLM modelleriyle doğal dil sohbetleri yaparak R'de istatistiksel analizler gerçekleştirmenizi sağlar. R kodu manuel olarak yazmak yerine, istediğiniz analizi basitçe tarif edebilir, yapay zeka sizin için R scriptlerini çalıştırır, görselleştirmeler oluşturur ve verilerinizi analiz eder.
+**Bu nedir?** Bu araç, Claude gibi LLM modelleriyle doğal dil sohbetleri yaparak R'de istatistiksel analizler gerçekleştirmenizi sağlar. Tüm R kodu güvenli Docker containerlarında çalışarak tam izolasyon ve güvenlik sağlanır.
 
 **Temel Faydalar:**
 - 🗣️ **Doğal Dil Arayüzü**: Karmaşık istatistiksel analizler için AI ile sohbet edin
+- 🐳 **Güvenli Docker Çalıştırma**: Tüm R kodu izole containerlarında maksimum güvenlik için çalışır
 - 📊 **Otomatik R Çalıştırma**: AI, kod yazmadan R kodunu çalıştırır ve sonuçları döndürür
 - 📁 **Doğrudan Dosya Erişimi**: Yerel dizinleri monte ederek AI'ın Excel/CSV dosyalarınızla çalışmasını sağlayın
 - 📈 **Yayın Kalitesinde Grafikler**: Sohbet yoluyla profesyonel ggplot2 görselleştirmeleri üretin
+- ⚡ **Akıllı Önbellek**: Sonuçlar önbelleğe alınarak tekrar işlemler anında gerçekleşir
 - 🔄 **Etkileşimli Analiz**: Takip soruları sorun ve analizinizi iteratif olarak geliştirin
 
 *[English](README.md) | **Türkçe***
@@ -31,7 +33,7 @@ Bu proje [gdbelvin'in rlang-mcp-server](https://github.com/gdbelvin/rlang-mcp-se
 - **Dosya İnceleme**: Excel sayfa yapısı dahil dosyalar hakkında detaylı bilgi alın
 - **Akıllı Dosya Keşfi**: Otomatik dosya tespit ve eksik dosyalar için öneri
 
-### 📂 **Dizin Yönetimi** (Yeni!)
+### 📂 **Dizin Yönetimi**
 - **Dinamik Mount**: Herhangi bir yerel dizini R işlemleri için monte edin
 - **Güvenli Erişim**: Absolute path kontrolü ve permission doğrulaması
 - **Otomatik Workspace**: r_workspace alt dizini otomatik olarak oluşturulur
@@ -42,16 +44,16 @@ Bu proje [gdbelvin'in rlang-mcp-server](https://github.com/gdbelvin/rlang-mcp-se
 - **Otomatik Bağımlılık**: Akıllı paket bağımlılık çözümü
 
 ### 🛡️ **Güvenlik ve İzolasyon**
-- **Docker Desteği**: Gelişmiş güvenlik için zorunlu konteyner çalıştırma
-- **Dosya Tipi Doğrulama**: Whitelist tabanlı dosya yükleme güvenliği
-- **Boyut Limitleri**: Yapılandırılabilir dosya boyutu kısıtlamaları
+- **Zorunlu Docker**: Tüm R kodu çalıştırma izole containerlarda
 - **Path Sanitization**: Directory traversal saldırılarına karşı koruma
+- **Dosya Erişim Kontrolü**: Uygun izin kontrolleri ile güvenli dosya sistemi erişimi
+- **Container İzolasyonu**: Tam process ve dosya sistemi izolasyonu
 
-### 🚀 **Geliştirici Deneyimi**
+### 🚀 **Performans ve Deneyim**
 - **FastMCP Framework**: Mükemmel performans ile modern Python MCP implementasyonu
+- **Akıllı Önbellek**: Tekrar işlemler için bellek içi önbellek sistemi
+- **Async Çalıştırma**: Daha iyi yanıt verme için engelleyici olmayan işlemler
 - **uv Paket Yöneticisi**: Yıldırım hızında bağımlılık yönetimi ve sanal ortamlar
-- **Kapsamlı Test**: Entegrasyon ve birim testleri ile tam test paketi
-- **Zengin Dokümantasyon**: Detaylı API dokümantasyonu ve kullanım örnekleri
 
 ## Hızlı Başlangıç
 
@@ -149,8 +151,7 @@ Bu MCP sunucusunu Claude Desktop ile kullanmak için:
         "--from",
         "git+https://github.com/saidsurucu/rlang-mcp-python",
         "rlang-mcp-python"
-      ],
-      "disabled": false
+      ]
     }
   }
 }
@@ -163,9 +164,10 @@ Bu MCP sunucusunu Claude Desktop ile kullanmak için:
 ### Sistem Gereksinimleri
 
 - **Python 3.12+**
-- **R 4.0+** (paketler otomatik kurulur)
+- **Docker** (zorunlu - tüm R çalıştırma containerlarında gerçekleşir)
 - **uv** (önerilen) veya pip paket yönetimi için
-- **Docker** (güvenli konteyner çalıştırma için gerekli)
+
+**Not**: Yerel R kurulumu gerekli değil - tüm R çalıştırma Docker containerlarında gerçekleşir.
 
 ### Sunucuyu Çalıştırma
 
@@ -209,8 +211,7 @@ Bu sunucu **7 kapsamlı araç** sunar:
         "--from", 
         "git+https://github.com/saidsurucu/rlang-mcp-python",
         "rlang-mcp-python"
-      ],
-      "disabled": false
+      ]
     }
   }
 }
@@ -288,15 +289,21 @@ Claude ile tam analiz için nasıl etkileşim kurabileceğiniz:
 
 ## Docker Desteği
 
-Güvenli çalıştırma için Docker gereklidir:
+Docker zorunludur ve başlangıçta otomatik kontrol edilir:
 
 ```bash
-# Docker imajını oluştur
-docker build -f Dockerfile.python -t r-server-mcp .
+# Docker'ın çalıştığından emin olun
+docker --version
 
-# Docker Compose ile çalıştır
-docker-compose -f docker-compose.python.yml up
+# R base image ilk kullanımda otomatik çekilir
+# Veya önceden çekebilirsiniz:
+docker pull r-base:latest
 ```
+
+Sunucu otomatik olarak:
+1. Docker'ın çalışıp çalışmadığını kontrol eder
+2. Gerekirse R base image'ını çeker
+3. Tüm R kodunu izole containerlarda çalıştırır
 
 ## Geliştirme
 
