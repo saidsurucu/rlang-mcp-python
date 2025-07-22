@@ -138,8 +138,7 @@ def execute_r_script_docker(r_code: str, timeout: int = 60) -> tuple[str, str, i
                 volumes=volumes,
                 working_dir="/data" if MOUNTED_DIRECTORY else "/tmp",
                 remove=True,
-                stderr=True,
-                timeout=timeout
+                stderr=True
             )
             
             output = result.decode('utf-8') if isinstance(result, bytes) else str(result)
