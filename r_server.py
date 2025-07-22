@@ -219,23 +219,37 @@ def execute_r_script_docker(r_code: str, timeout: int = 60) -> tuple[str, str, i
         import uuid
         script_name = f"/tmp/r_script_{uuid.uuid4().hex[:8]}.R"
         
-        # Write R code to file in container
+        # Add UTF-8 encoding support to R code
+        enhanced_r_code = f"""# Set UTF-8 encoding
+Sys.setlocale("LC_ALL", "en_US.UTF-8")
+options(encoding = "UTF-8")
+
+{r_code}
+"""
+        
+        # Write R code to file in container with explicit UTF-8 encoding
         create_file_result = container.exec_run([
             "sh", "-c", f"cat > {script_name}"
-        ], stdin=r_code.encode('utf-8'))
+        ], stdin=enhanced_r_code.encode('utf-8'))
         
         if create_file_result.exit_code != 0:
             return "", f"Failed to create R script file: {create_file_result.output.decode()}", -1
         
-        # Execute the R script file
+        # Execute the R script file with UTF-8 environment
         exec_result = container.exec_run([
-            "Rscript", script_name
-        ])
+            "Rscript", "--encoding=UTF-8", script_name
+        ], environment={"LANG": "en_US.UTF-8", "LC_ALL": "en_US.UTF-8"})
         
         # Clean up the temporary file
         container.exec_run(["rm", script_name])
         
-        output = exec_result.output.decode('utf-8') if exec_result.output else ""
+        # Decode output with UTF-8
+        try:
+            output = exec_result.output.decode('utf-8') if exec_result.output else ""
+        except UnicodeDecodeError:
+            # Fallback to latin-1 if UTF-8 fails
+            output = exec_result.output.decode('latin-1') if exec_result.output else ""
+        
         return output, "", exec_result.exit_code
         
     except Exception as e:
