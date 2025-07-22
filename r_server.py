@@ -804,23 +804,9 @@ def install_r_package(
                 tryCatch({{
                   cat("Attempting installation of {package_name}\\n")
                   
-                  # Strategy 1: Try binary installation first (fastest)
-                  cat("Step 1: Trying binary installation\\n")
-                  tryCatch({{
-                    install.packages("{package_name}", repos="{repo}", type="binary", quiet=TRUE)
-                  }}, error = function(e) {{
-                    if (grepl("type.*binary.*not supported", e$message, ignore.case=TRUE)) {{
-                      cat("Binary installation not supported on this platform, skipping to source\\n")
-                    }} else {{
-                      cat("Binary installation error:", e$message, "\\n")
-                    }}
-                  }})
-                  
-                  if (requireNamespace("{package_name}", quietly = TRUE)) {{
-                    cat("SUCCESS\\n")
-                    cat("Version:", as.character(packageVersion("{package_name}")), "\\n")
-                  }} else {{
-                cat("Step 2: Binary failed, trying source with dependencies\\n")
+                  # Skip binary installation in Docker - go straight to source
+                  cat("Skipping binary installation (Docker compatibility)\\n")
+                  cat("Step 1: Installing source with dependencies\\n")
                 
                 # Strategy 2: Install common dependencies first
                 common_deps <- c("Rcpp", "RcppArmadillo", "numDeriv", "zoo", "xts")
