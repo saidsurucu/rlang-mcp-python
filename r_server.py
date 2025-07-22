@@ -219,22 +219,43 @@ def execute_r_script_docker(r_code: str, timeout: int = 60) -> tuple[str, str, i
         import uuid
         script_name = f"/tmp/r_script_{uuid.uuid4().hex[:8]}.R"
         
+        # Clean up problematic quotes and escape sequences in R code
+        cleaned_r_code = r_code.replace('\\"', '"').replace('\\n', '\n').replace('\\t', '\t')
+        
         # Add UTF-8 encoding support to R code
         enhanced_r_code = f"""# Set UTF-8 encoding
 Sys.setlocale("LC_ALL", "en_US.UTF-8")
 options(encoding = "UTF-8")
 
-{r_code}
+{cleaned_r_code}
 """
         
-        # Write R code to file in container with explicit UTF-8 encoding
-        # Use tee instead of cat to avoid shell interpretation issues
-        create_file_result = container.exec_run([
-            "tee", script_name
-        ], stdin=enhanced_r_code.encode('utf-8'))
+        # Write R code to file using Python's file writing approach
+        import tempfile
+        import os
         
-        if create_file_result.exit_code != 0:
-            return "", f"Failed to create R script file: {create_file_result.output.decode()}", -1
+        # First write to local temp file, then copy to container
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', suffix='.R', delete=False) as temp_file:
+            temp_file.write(enhanced_r_code)
+            temp_local_path = temp_file.name
+        
+        try:
+            # Copy file to container using tar archive
+            import tarfile
+            import io
+            
+            # Create tar archive in memory
+            tar_stream = io.BytesIO()
+            with tarfile.open(fileobj=tar_stream, mode='w') as tar:
+                tar.add(temp_local_path, arcname=os.path.basename(script_name))
+            tar_stream.seek(0)
+            
+            # Extract to container
+            container.put_archive('/tmp/', tar_stream)
+            
+        finally:
+            # Clean up local temp file
+            os.unlink(temp_local_path)
         
         # Execute the R script file with UTF-8 environment
         exec_result = container.exec_run([
@@ -246,10 +267,10 @@ options(encoding = "UTF-8")
         
         # Decode output with UTF-8
         try:
-            output = exec_result.output.decode('utf-8') if exec_result.output else ""
-        except UnicodeDecodeError:
-            # Fallback to latin-1 if UTF-8 fails
-            output = exec_result.output.decode('latin-1') if exec_result.output else ""
+            output = exec_result.output.decode('utf-8', errors='replace') if exec_result.output else ""
+        except Exception:
+            # Final fallback
+            output = str(exec_result.output) if exec_result.output else ""
         
         return output, "", exec_result.exit_code
         
