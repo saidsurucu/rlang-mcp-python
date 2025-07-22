@@ -41,6 +41,9 @@ CACHE_TTL = 3600  # Cache time-to-live in seconds
 result_cache: Dict[str, Any] = {}
 cache_timestamps: Dict[str, float] = {}
 
+# Persistent R container
+R_CONTAINER = None
+
 
 # No session pooling - always use Docker for isolation
 
@@ -108,59 +111,132 @@ Docker is required for secure R code execution.
         print(error_message, file=sys.stderr)
         raise RuntimeError("Docker is not installed or not running. Please install Docker to use this MCP server.")
 
-def execute_r_script_docker(r_code: str, timeout: int = 60) -> tuple[str, str, int]:
-    """Execute R script in Docker container with mounted directories."""
+def get_or_create_r_container():
+    """Get or create a persistent R container."""
+    global R_CONTAINER
+    
     if not check_docker():
-        return "", "Docker is not available", -1
+        raise RuntimeError("Docker is not available")
     
     try:
         client = docker.from_env()
         
-        # Create temp directory and script
-        with tempfile.TemporaryDirectory() as temp_dir:
-            script_path = Path(temp_dir) / "script.R"
-            script_path.write_text(r_code)
-            
-            # Prepare volumes
-            volumes = {
-                temp_dir: {"bind": "/tmp", "mode": "rw"}
-            }
-            
-            # Add mounted directory if available
-            if MOUNTED_DIRECTORY:
-                # Mount the user's directory to /data in container
-                volumes[str(MOUNTED_DIRECTORY)] = {"bind": "/data", "mode": "ro"}
-            
-            # Run in container
-            result = client.containers.run(
-                "r-base:latest",
-                f"Rscript /tmp/script.R",
-                volumes=volumes,
-                working_dir="/data" if MOUNTED_DIRECTORY else "/tmp",
-                remove=True,
-                stderr=True
-            )
-            
-            output = result.decode('utf-8') if isinstance(result, bytes) else str(result)
-            return output, "", 0
-            
-    except docker.errors.ContainerError as e:
-        stderr = e.stderr.decode('utf-8') if e.stderr else str(e)
-        return "", stderr, e.exit_status
+        # Check if container exists and is running
+        if R_CONTAINER:
+            try:
+                container = client.containers.get(R_CONTAINER)
+                if container.status == 'running':
+                    return container
+                else:
+                    container.remove()
+                    R_CONTAINER = None
+            except docker.errors.NotFound:
+                R_CONTAINER = None
+        
+        # Create new persistent container
+        volumes = {}
+        working_dir = "/root"
+        
+        # Add mounted directory if available
+        if MOUNTED_DIRECTORY:
+            volumes[str(MOUNTED_DIRECTORY)] = {"bind": "/data", "mode": "ro"}
+            working_dir = "/data"
+        
+        print("Creating persistent R container...", file=sys.stderr)
+        container = client.containers.run(
+            "r-base:latest",
+            command="tail -f /dev/null",  # Keep container alive
+            volumes=volumes,
+            working_dir=working_dir,
+            detach=True,
+            remove=False
+        )
+        
+        # Install common packages in the persistent container
+        setup_script = '''
+        # Install common packages once
+        cat("Installing common R packages...\\n")
+        packages <- c("readxl", "writexl", "dplyr", "tidyr", "ggplot2", "cowplot")
+        for(pkg in packages) {
+          if(!require(pkg, character.only=TRUE, quietly=TRUE)) {
+            cat("Installing", pkg, "...\\n")
+            install.packages(pkg, repos="https://cran.r-project.org", quiet=TRUE)
+          }
+        }
+        cat("All packages installed!\\n")
+        '''
+        
+        exec_result = container.exec_run(f"Rscript -e '{setup_script}'")
+        if exec_result.exit_code != 0:
+            print(f"Warning: Package installation failed: {exec_result.output.decode()}", file=sys.stderr)
+        else:
+            print("✓ R packages installed in container", file=sys.stderr)
+        
+        R_CONTAINER = container.id
+        return container
+        
+    except Exception as e:
+        print(f"Error creating R container: {e}", file=sys.stderr)
+        raise
+
+def execute_r_script_docker(r_code: str, timeout: int = 60) -> tuple[str, str, int]:
+    """Execute R script in persistent Docker container."""
+    try:
+        container = get_or_create_r_container()
+        
+        # Execute R script in the persistent container
+        r_command = f"Rscript -e '{r_code}'"
+        exec_result = container.exec_run(r_command)
+        
+        output = exec_result.output.decode('utf-8') if exec_result.output else ""
+        return output, "", exec_result.exit_code
+        
     except Exception as e:
         return "", str(e), -1
+
+def cleanup_r_container():
+    """Clean up the persistent R container."""
+    global R_CONTAINER
+    
+    if R_CONTAINER:
+        try:
+            client = docker.from_env()
+            container = client.containers.get(R_CONTAINER)
+            container.remove(force=True)
+            print("✓ R container cleaned up", file=sys.stderr)
+        except:
+            pass
+        finally:
+            R_CONTAINER = None
 
 
 # Precompiled R script templates
 R_SCRIPT_TEMPLATES = {
     "ggplot_base": """
-library(ggplot2)
-library(cowplot)
+# Load required packages (already installed in persistent container)
+suppressPackageStartupMessages({{
+  library(ggplot2)
+  library(cowplot)
+}})
+
 # Container working directory is already set correctly
 {custom_code}
-ggsave("{output_path}", width = {width}/{dpi}, height = {height}/{dpi}, dpi = {dpi})
+
+# Save plot to temporary location then copy to output
+temp_plot <- "/tmp/temp_plot.{format}"
+ggsave(temp_plot, width = {width}/{dpi}, height = {height}/{dpi}, dpi = {dpi})
+file.copy(temp_plot, "{output_path}")
 """,
     "execute_base": """
+# Load common packages (already installed in persistent container)  
+suppressPackageStartupMessages({{
+  library(readxl)
+  library(writexl)
+  library(dplyr)
+  library(tidyr)
+  library(ggplot2)
+}})
+
 # Container working directory is already set correctly
 # Files are available in current directory when mounted
 {helper_functions}
@@ -254,6 +330,7 @@ def render_ggplot(
             "ggplot_base",
             custom_code=code,
             output_path=output_path,
+            format=output_type,
             width=width,
             height=height,
             dpi=resolution
@@ -490,7 +567,7 @@ def install_r_package(
     version: str = "",
     repo: str = "https://cran.r-project.org"
 ) -> dict:
-    """Install an R package using Docker."""
+    """Install an R package using Docker. Note: Common packages are auto-installed in execute_r_script."""
     if not package_name or not package_name.replace(".", "").replace("_", "").isalnum():
         return {
             "success": False,
@@ -604,8 +681,21 @@ def initialize_server():
     print("✓ Server ready with Docker execution", file=sys.stderr)
 
 if __name__ == "__main__":
-    # Run initialization
-    initialize_server()
+    import atexit
     
-    # Start MCP server
-    mcp.run()
+    # Register cleanup function
+    atexit.register(cleanup_r_container)
+    
+    try:
+        # Run initialization
+        initialize_server()
+        
+        # Start MCP server
+        mcp.run()
+    except KeyboardInterrupt:
+        print("\nShutting down server...", file=sys.stderr)
+        cleanup_r_container()
+    except Exception as e:
+        print(f"Server error: {e}", file=sys.stderr)
+        cleanup_r_container()
+        raise
