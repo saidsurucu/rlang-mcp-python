@@ -228,8 +228,9 @@ options(encoding = "UTF-8")
 """
         
         # Write R code to file in container with explicit UTF-8 encoding
+        # Use tee instead of cat to avoid shell interpretation issues
         create_file_result = container.exec_run([
-            "sh", "-c", f"cat > {script_name}"
+            "tee", script_name
         ], stdin=enhanced_r_code.encode('utf-8'))
         
         if create_file_result.exit_code != 0:
