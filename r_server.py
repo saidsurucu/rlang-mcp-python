@@ -30,6 +30,37 @@ mcp = FastMCP("R-Server MCP")
 # Global variable to store mounted directory
 MOUNTED_DIRECTORY = None
 
+# Check Docker availability
+def check_docker():
+    """Check if Docker is installed and running."""
+    try:
+        client = docker.from_env()
+        client.ping()
+        return True
+    except (docker.errors.DockerException, Exception):
+        return False
+
+def ensure_docker():
+    """Ensure Docker is available or raise an error with installation instructions."""
+    if not check_docker():
+        error_message = """
+❌ Docker is required but not available!
+
+Please install Docker:
+• macOS: Install Docker Desktop from https://docker.com/products/docker-desktop
+• Linux: Install Docker Engine: https://docs.docker.com/engine/install/
+• Windows: Install Docker Desktop from https://docker.com/products/docker-desktop
+
+After installation:
+1. Start Docker Desktop (macOS/Windows) or Docker service (Linux)
+2. Pull the R base image: docker pull r-base:latest
+3. Restart this MCP server
+
+Docker is required for secure R code execution in isolated containers.
+"""
+        print(error_message, file=sys.stderr)
+        raise RuntimeError("Docker is not installed or not running. Please install Docker to use this MCP server.")
+
 # Check and install R packages automatically
 def ensure_r_packages():
     """Check if required R packages are installed and install them if missing."""
@@ -993,4 +1024,9 @@ def list_r_packages(
         }
 
 if __name__ == "__main__":
+    # Check Docker availability before starting
+    print("Checking Docker availability...", file=sys.stderr)
+    ensure_docker()
+    print("✓ Docker is available", file=sys.stderr)
+    
     mcp.run()
