@@ -20,7 +20,8 @@ import tempfile
 import time
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional, Literal, Dict, Any
+from typing import Optional, Literal, Dict, Any, Annotated
+from pydantic import Field
 
 try:
     import docker
@@ -366,9 +367,15 @@ def compile_r_script(template: str, **kwargs) -> str:
 
 # Optimized tools
 
-@mcp.tool
-def mount_directory(directory_path: str) -> dict:
-    """Mount a directory for R workspace operations."""
+@mcp.tool(
+    name="mount_directory",
+    description="Mount local directory to access files in R. Use absolute paths like /Users/name/data.",
+    annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False}
+)
+def mount_directory(
+    directory_path: Annotated[str, Field(description="Absolute path to directory containing data files (e.g., /Users/name/Documents/data)")]
+) -> dict:
+    """Mount local directory to access files in R. Use absolute paths like /Users/name/data."""
     global MOUNTED_DIRECTORY
     
     # Check cache first
@@ -414,16 +421,20 @@ def mount_directory(directory_path: str) -> dict:
 
 
 # Main synchronous tools (FastMCP works better with sync)
-@mcp.tool
+@mcp.tool(
+    name="render_ggplot",
+    description="Create ggplot2 visualizations. Pass R code with ggplot commands.",
+    annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False}
+)
 def render_ggplot(
-    code: str,
-    output_type: Literal["png", "jpeg", "pdf", "svg"] = "png",
-    width: int = 800,
-    height: int = 600,
-    resolution: int = 96,
-    use_cache: bool = True
+    code: Annotated[str, Field(description="R code using ggplot2 syntax (e.g., 'ggplot(data) + geom_point(aes(x, y))')")],
+    output_type: Annotated[Literal["png", "jpeg", "pdf", "svg"], Field(description="Image format for output")] = "png",
+    width: Annotated[int, Field(description="Image width in pixels", ge=100, le=4000)] = 800,
+    height: Annotated[int, Field(description="Image height in pixels", ge=100, le=4000)] = 600,
+    resolution: Annotated[int, Field(description="DPI resolution for image quality", ge=50, le=300)] = 96,
+    use_cache: Annotated[bool, Field(description="Use cached results for identical plots")] = True
 ) -> dict:
-    """Render a ggplot2 visualization from R code using Docker."""
+    """Create ggplot2 visualizations. Pass R code with ggplot commands."""
     
     # Check if container is ready
     global R_CONTAINER
@@ -495,12 +506,16 @@ def render_ggplot(
         
         return result
 
-@mcp.tool
+@mcp.tool(
+    name="execute_r_script",
+    description="Run R code and get text output. Use for data analysis, calculations, file operations.",
+    annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False}
+)
 def execute_r_script(
-    code: str,
-    timeout: int = 60
+    code: Annotated[str, Field(description="R code to execute (can read Excel files, do statistics, data manipulation)")],
+    timeout: Annotated[int, Field(description="Maximum execution time in seconds", ge=10, le=300)] = 60
 ) -> dict:
-    """Execute an R script and return the text output using Docker."""
+    """Run R code and get text output. Use for data analysis, calculations, file operations."""
     
     # Check if container is ready
     global R_CONTAINER
@@ -554,9 +569,16 @@ def get_working_directory():
     return MOUNTED_DIRECTORY if MOUNTED_DIRECTORY else Path.cwd()
 
 # Keep other tools unchanged but add caching where beneficial
-@mcp.tool
-def list_files(pattern: str = "*", file_type: str = "all") -> dict:
-    """List files with caching."""
+@mcp.tool(
+    name="list_files",
+    description="List files in workspace. Use file_type: excel, csv, text, or all.",
+    annotations={"readOnlyHint": True, "openWorldHint": False}
+)
+def list_files(
+    pattern: Annotated[str, Field(description="File name pattern to match (e.g., '*.xlsx', 'data*', '*')")] = "*",
+    file_type: Annotated[Literal["excel", "csv", "text", "all"], Field(description="Filter by file type")] = "all"
+) -> dict:
+    """List files in workspace. Use file_type: excel, csv, text, or all."""
     cache_key = get_cache_key("list_files", {"pattern": pattern, "type": file_type})
     cached = get_cached_result(cache_key)
     if cached:
@@ -625,9 +647,13 @@ def list_files(pattern: str = "*", file_type: str = "all") -> dict:
         }
 
 # Docker container management tool
-@mcp.tool
+@mcp.tool(
+    name="initialize_r_container", 
+    description="Start R container with packages. Run this first before using other R tools.",
+    annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True}
+)
 def initialize_r_container() -> dict:
-    """Initialize and setup the R Docker container with all required packages."""
+    """Start R container with packages. Run this first before using other R tools."""
     global R_CONTAINER
     
     try:
@@ -661,9 +687,13 @@ def initialize_r_container() -> dict:
             "status": "failed"
         }
 
-@mcp.tool
+@mcp.tool(
+    name="container_status",
+    description="Check if R container is running and ready for use.",
+    annotations={"readOnlyHint": True, "openWorldHint": False}
+)
 def container_status() -> dict:
-    """Check the status of the R Docker container."""
+    """Check if R container is running and ready for use."""
     global R_CONTAINER
     
     if not R_CONTAINER:
@@ -701,9 +731,15 @@ def container_status() -> dict:
 
 # Additional tool implementations
 
-@mcp.tool
-def file_info(filename: str) -> dict:
-    """Get detailed information about a specific file."""
+@mcp.tool(
+    name="file_info",
+    description="Get file details including size, type, and Excel sheet names if applicable.",
+    annotations={"readOnlyHint": True, "openWorldHint": False}
+)
+def file_info(
+    filename: Annotated[str, Field(description="Name of file to inspect (e.g., 'data.xlsx', 'report.csv')")] 
+) -> dict:
+    """Get file details including size, type, and Excel sheet names if applicable."""
     import mimetypes
     from datetime import datetime
     
@@ -776,13 +812,17 @@ def file_info(filename: str) -> dict:
             "message": f"Error: {str(e)}"
         }
 
-@mcp.tool
+@mcp.tool(
+    name="install_r_package",
+    description="Install R package. Common packages (readxl, ggplot2, dplyr) already included.",
+    annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True}
+)
 def install_r_package(
-    package_name: str,
-    version: str = "",
-    repo: str = "https://cran.r-project.org"
+    package_name: Annotated[str, Field(description="Name of R package to install (e.g., 'forecast', 'randomForest')")],
+    version: Annotated[str, Field(description="Specific version to install (optional)")] = "",
+    repo: Annotated[str, Field(description="CRAN repository URL")] = "https://cran.r-project.org"
 ) -> dict:
-    """Install an R package using Docker. Note: Common packages are auto-installed in execute_r_script."""
+    """Install R package. Common packages (readxl, ggplot2, dplyr) already included."""
     
     # Check if container is ready
     global R_CONTAINER
@@ -843,12 +883,16 @@ def install_r_package(
             "details": stderr
         }
 
-@mcp.tool
+@mcp.tool(
+    name="list_r_packages",
+    description="List installed R packages. Use pattern to filter by name.",
+    annotations={"readOnlyHint": True, "openWorldHint": False}
+)
 def list_r_packages(
-    installed_only: bool = True,
-    pattern: str = ""
+    installed_only: Annotated[bool, Field(description="Show only installed packages")] = True,
+    pattern: Annotated[str, Field(description="Filter packages by name pattern (e.g., 'ggplot', 'data')")] = ""
 ) -> dict:
-    """List R packages using Docker."""
+    """List installed R packages. Use pattern to filter by name."""
     
     # Check if container is ready
     global R_CONTAINER
