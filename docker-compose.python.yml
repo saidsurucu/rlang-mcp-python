@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  r-server-python:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./output:/app/output
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - r-server-net
+
+networks:
+  r-server-net:
+    driver: bridge
