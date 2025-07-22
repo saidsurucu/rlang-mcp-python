@@ -1,9 +1,14 @@
 """
-R-Server MCP - A FastMCP server for R data visualization and script execution.
+R-Server MCP - A FastMCP server for R data analysis, visualization, and script execution.
 
-Provides two main tools:
+Provides 7 comprehensive tools:
+- mount_directory: Mount local directories for R operations
+- list_files: List and filter workspace files  
+- file_info: Get detailed file information
 - render_ggplot: Generate visualizations using R's ggplot2 library
-- execute_r_script: Execute R scripts and return text output
+- execute_r_script: Execute R scripts with smart file handling
+- install_r_package: Install R packages on-demand
+- list_r_packages: List and search installed packages
 """
 
 import asyncio
@@ -191,128 +196,6 @@ def get_working_directory():
         return MOUNTED_DIRECTORY
     return Path.cwd()
 
-@mcp.tool
-def upload_file(
-    file_content: str,
-    filename: str,
-    overwrite: bool = False
-) -> dict:
-    """
-    Upload a file to the R working directory.
-    
-    Args:
-        file_content: Base64 encoded file content
-        filename: Name of the file to save
-        overwrite: Allow overwriting existing files
-    
-    Returns:
-        Dictionary with upload status and file information
-    """
-    import os
-    import base64
-    import re
-    from pathlib import Path
-    
-    # Validate filename (security)
-    if not filename or ".." in filename or "/" in filename or "\\" in filename:
-        return {
-            "success": False,
-            "filename": filename,
-            "message": "Invalid filename. No path traversal allowed.",
-            "details": ""
-        }
-    
-    # Sanitize filename
-    filename = re.sub(r'[<>:"|?*]', '_', filename)
-    
-    # Check file extension (whitelist)
-    allowed_extensions = {'.xlsx', '.xls', '.csv', '.txt', '.tsv', '.json'}
-    file_ext = Path(filename).suffix.lower()
-    
-    if file_ext not in allowed_extensions:
-        return {
-            "success": False,
-            "filename": filename,
-            "message": f"File type not allowed. Supported: {', '.join(allowed_extensions)}",
-            "details": f"Received extension: {file_ext}"
-        }
-    
-    try:
-        # Decode base64 content
-        try:
-            file_data = base64.b64decode(file_content)
-        except Exception as e:
-            return {
-                "success": False,
-                "filename": filename,
-                "message": "Invalid base64 content",
-                "details": str(e)
-            }
-        
-        # Check file size (10MB limit)
-        file_size = len(file_data)
-        max_size = 10 * 1024 * 1024  # 10MB
-        
-        if file_size > max_size:
-            return {
-                "success": False,
-                "filename": filename,
-                "message": f"File too large. Maximum size: 10MB",
-                "details": f"File size: {file_size / (1024*1024):.2f}MB"
-            }
-        
-        # Create R working directory if needed
-        base_dir = get_working_directory()
-        r_work_dir = base_dir / "r_workspace"
-        r_work_dir.mkdir(exist_ok=True)
-        
-        # Full file path
-        file_path = r_work_dir / filename
-        
-        # Check if file exists
-        if file_path.exists() and not overwrite:
-            return {
-                "success": False,
-                "filename": filename,
-                "message": "File already exists. Use overwrite=true to replace it.",
-                "details": f"Existing file size: {file_path.stat().st_size} bytes"
-            }
-        
-        # Write file
-        file_path.write_bytes(file_data)
-        
-        # Verify file was written
-        if not file_path.exists():
-            return {
-                "success": False,
-                "filename": filename,
-                "message": "Failed to write file",
-                "details": ""
-            }
-        
-        # Get file info
-        file_stat = file_path.stat()
-        
-        print(f"✓ File uploaded successfully: {filename} ({file_size} bytes)", file=sys.stderr)
-        
-        return {
-            "success": True,
-            "filename": filename,
-            "message": "File uploaded successfully",
-            "path": str(file_path),
-            "size_bytes": file_stat.st_size,
-            "size_mb": round(file_stat.st_size / (1024*1024), 2),
-            "extension": file_ext,
-            "details": f"Saved to R workspace directory"
-        }
-        
-    except Exception as e:
-        return {
-            "success": False,
-            "filename": filename,
-            "message": f"Upload failed: {str(e)}",
-            "details": ""
-        }
 
 @mcp.tool
 def list_files(
@@ -647,7 +530,7 @@ workspace_dir <- file.path(base_dir, "r_workspace")
 if (dir.exists(workspace_dir)) {{
   workspace_files <- list.files(workspace_dir, full.names = TRUE)
   if (length(workspace_files) > 0) {{
-    cat("Found uploaded files:", paste(basename(workspace_files), collapse=", "), "\\n")
+    cat("Found workspace files:", paste(basename(workspace_files), collapse=", "), "\\n")
   }}
 }}
 
@@ -744,10 +627,10 @@ setwd(base_dir)
 workspace_dir <- file.path(base_dir, "r_workspace")
 
 if (dir.exists(workspace_dir)) {{
-  # List available uploaded files
+  # List available workspace files
   workspace_files <- list.files(workspace_dir, full.names = FALSE)
   if (length(workspace_files) > 0) {{
-    cat("📁 Available uploaded files:", paste(workspace_files, collapse=", "), "\\n")
+    cat("📁 Available workspace files:", paste(workspace_files, collapse=", "), "\\n")
     
     # Helper function to read files from workspace
     read_workspace_file <- function(filename) {{

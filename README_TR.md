@@ -154,12 +154,11 @@ python -m r_server
 
 ## Mevcut Araçlar
 
-Bu sunucu **8 kapsamlı araç** sunar:
+Bu sunucu **7 kapsamlı araç** sunar:
 
 | Araç | Açıklama | Kategori |
 |------|----------|----------|
 | `mount_directory` | R işlemleri için yerel dizin monte et | Dizin Yönetimi |
-| `upload_file` | R çalışma alanına dosya yükle | Dosya Yönetimi |
 | `list_files` | Çalışma alanı dosyalarını listele ve filtrele | Dosya Yönetimi |  
 | `file_info` | Detaylı dosya bilgisi al | Dosya Yönetimi |
 | `render_ggplot` | ggplot2 görselleştirmeleri oluştur | Görselleştirme |

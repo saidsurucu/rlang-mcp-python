@@ -26,7 +26,7 @@ This project is inspired by [gdbelvin's rlang-mcp-server](https://github.com/gdb
 - **Customizable Output**: Control image dimensions, resolution, and quality
 
 ### 📁 **File Management** (New!)
-- **File Upload**: Upload Excel, CSV, JSON, and text files to the R workspace
+- **Directory Mounting**: Mount local directories to access files directly in R workspace
 - **File Listing**: Browse and filter files in the workspace with detailed metadata
 - **File Inspection**: Get detailed information about files including Excel sheet structure
 - **Smart File Discovery**: Automatic file detection and suggestion for missing files
@@ -38,9 +38,8 @@ This project is inspired by [gdbelvin's rlang-mcp-server](https://github.com/gdb
 
 ### 🛡️ **Security & Isolation**
 - **Docker Support**: Required containerized execution for enhanced security
-- **File Type Validation**: Whitelist-based file upload security
-- **Size Limits**: Configurable file size restrictions
 - **Path Sanitization**: Protection against directory traversal attacks
+- **File Access Control**: Secure file system access with proper permission checks
 
 ### 🚀 **Developer Experience**
 - **FastMCP Framework**: Modern Python MCP implementation with excellent performance
@@ -149,12 +148,11 @@ python -m r_server
 
 ## Tools Available
 
-This server provides **8 comprehensive tools**:
+This server provides **7 comprehensive tools**:
 
 | Tool | Description | Category |
 |------|-------------|----------|
 | `mount_directory` | Mount a local directory for R operations | Directory Management |
-| `upload_file` | Upload files to R workspace | File Management |
 | `list_files` | List and filter workspace files | File Management |  
 | `file_info` | Get detailed file information | File Management |
 | `render_ggplot` | Generate ggplot2 visualizations | Visualization |
@@ -222,11 +220,11 @@ Request custom visualizations:
 
 > "Generate a boxplot comparing revenue distribution between quarters and departments from my quarterly report data."
 
-### Alternative: Upload Files Method
+### Directory Structure Method
 
-If you prefer to upload individual files, ask:
+The recommended workflow uses directory mounting:
 
-> "I'll upload an Excel file. Please save it and then analyze the data for trends and patterns."
+> "Please mount my data directory so you can analyze all my Excel files for trends and patterns."
 
 ### Complete Workflow Example
 
@@ -383,11 +381,11 @@ uvx --from git+https://github.com/saidsurucu/rlang-mcp-python rlang-mcp-python -
 
 | Feature | Original (Go) | This Version (Python) |
 |---------|---------------|----------------------|
-| Core Tools | 2 | **8** |
+| Core Tools | 2 | **7** |
 | Directory Mounting | ❌ | ✅ |
 | File Management | ❌ | ✅ |
 | Package Management | ❌ | ✅ |
-| File Upload | ❌ | ✅ |
+| File Access Control | ❌ | ✅ |
 | Smart File Handling | ❌ | ✅ |
 | Modern Framework | ❌ | ✅ (FastMCP) |
 | Package Manager | Go modules | **uv** |
