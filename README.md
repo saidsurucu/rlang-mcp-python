@@ -140,8 +140,7 @@ To use this MCP server with Claude Desktop:
         "--from",
         "git+https://github.com/saidsurucu/rlang-mcp-python",
         "rlang-mcp-python"
-      ],
-      "disabled": false
+      ]
     }
   }
 }
@@ -206,8 +205,7 @@ Add to your `claude_desktop_config.json`:
         "--from", 
         "/path/to/rlang-mcp-python",
         "r-server-mcp"
-      ],
-      "disabled": false
+      ]
     }
   }
 }
