@@ -1097,7 +1097,11 @@ def initialize_server():
     
     print("✓ Server ready with Docker execution", file=sys.stderr)
 
-if __name__ == "__main__":
+# Export mcp for external use
+__all__ = ["mcp"]
+
+def main():
+    """Main entry point for the MCP server."""
     import atexit
     
     # Register cleanup function
@@ -1116,3 +1120,6 @@ if __name__ == "__main__":
         print(f"Server error: {e}", file=sys.stderr)
         cleanup_r_container()
         raise
+
+if __name__ == "__main__":
+    main()
