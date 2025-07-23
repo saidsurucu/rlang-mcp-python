@@ -28,10 +28,8 @@ Bu proje [gdbelvin'in rlang-mcp-server](https://github.com/gdbelvin/rlang-mcp-se
 - **Özelleştirilebilir Çıktı**: Görüntü boyutları, çözünürlük ve kalite kontrolü
 
 ### 📁 **Dosya Yönetimi** (Yeni!)
-- **Dosya Yükleme**: Excel, CSV, JSON ve metin dosyalarını R çalışma alanına yükleyin
-- **Dosya Listeleme**: Çalışma alanındaki dosyaları detaylı metadata ile tarayın ve filtreleyin
-- **Dosya İnceleme**: Excel sayfa yapısı dahil dosyalar hakkında detaylı bilgi alın
-- **Akıllı Dosya Keşfi**: Otomatik dosya tespit ve eksik dosyalar için öneri
+- **Dizin Montajı**: Yerel dizinleri R çalışma alanında doğrudan erişim için monte edin
+- **Akıllı Dosya Keşfi**: Monte edilen dizinlerdeki dosyaları keşfetmek ve analiz etmek için R scriptleri kullanın
 
 ### 📂 **Dizin Yönetimi**
 - **Dinamik Mount**: Herhangi bir yerel dizini R işlemleri için monte edin
@@ -187,16 +185,13 @@ python -m r_server
 
 ## Mevcut Araçlar
 
-Bu sunucu **8 kapsamlı araç** sunar:
+Bu sunucu **5 temel araç** sunar:
 
 | Araç | Açıklama | Kategori |
 |------|----------|----------|
 | `initialize_r_container` | Kalıcı R container'ı başlat | Container Yönetimi |
 | `container_status` | Container durumu ve bilgilerini kontrol et | Container Yönetimi |
 | `mount_directory` | Yerel dizini container'da /data olarak mount et | Dizin Yönetimi |
-| `list_files` | Container çalışma alanındaki dosyaları listele | Dosya Yönetimi |  
-| `file_info` | Detaylı dosya bilgisi al | Dosya Yönetimi |
-| `render_ggplot` | ggplot2 görselleştirmeleri oluştur | Görselleştirme |
 | `execute_r_script` | Akıllı dosya işleme ile R scriptleri çalıştır | Çalıştırma |
 | `install_r_package` | İsteğe bağlı R paketi kur | Paket Yönetimi |
 
@@ -405,11 +400,11 @@ uvx --from git+https://github.com/saidsurucu/rlang-mcp-python rlang-mcp-python -
 
 | Özellik | Orijinal (Go) | Bu Versiyon (Python) |
 |---------|---------------|----------------------|
-| Temel Araçlar | 2 | **8** |
+| Temel Araçlar | 2 | **5** |
 | Dizin Montajı | ❌ | ✅ |
 | Dosya Yönetimi | ❌ | ✅ |
 | Paket Yönetimi | ❌ | ✅ |
-| Dosya Yükleme | ❌ | ✅ |
+| Dosya Erişim Kontrolü | ❌ | ✅ |
 | Akıllı Dosya İşleme | ❌ | ✅ |
 | Modern Framework | ❌ | ✅ (FastMCP) |
 | Paket Yöneticisi | Go modules | **uv** |

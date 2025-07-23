@@ -29,9 +29,7 @@ This project is inspired by [gdbelvin's rlang-mcp-server](https://github.com/gdb
 
 ### 📁 **File Management** (New!)
 - **Directory Mounting**: Mount local directories to access files directly in R workspace
-- **File Listing**: Browse and filter files in the workspace with detailed metadata
-- **File Inspection**: Get detailed information about files including Excel sheet structure
-- **Smart File Discovery**: Automatic file detection and suggestion for missing files
+- **Smart File Discovery**: Use R scripts to explore and analyze files in mounted directories
 
 ### 📦 **Package Management**
 - **Package Installation**: Install R packages on-demand with version control
@@ -185,16 +183,13 @@ python -m r_server
 
 ## Tools Available
 
-This server provides **8 comprehensive tools**:
+This server provides **5 essential tools**:
 
 | Tool | Description | Category |
 |------|-------------|----------|
 | `initialize_r_container` | Initialize persistent R container | Container Management |
 | `container_status` | Check container status and info | Container Management |
 | `mount_directory` | Mount local directory to /data in container | Directory Management |
-| `list_files` | List files in container workspace | File Management |  
-| `file_info` | Get detailed file information | File Management |
-| `render_ggplot` | Generate ggplot2 visualizations | Visualization |
 | `execute_r_script` | Execute R scripts with smart file handling | Execution |
 | `install_r_package` | Install R packages on-demand | Package Management |
 
@@ -427,7 +422,7 @@ uvx --from git+https://github.com/saidsurucu/rlang-mcp-python rlang-mcp-python -
 
 | Feature | Original (Go) | This Version (Python) |
 |---------|---------------|----------------------|
-| Core Tools | 2 | **7** |
+| Core Tools | 2 | **5** |
 | Directory Mounting | ❌ | ✅ |
 | File Management | ❌ | ✅ |
 | Package Management | ❌ | ✅ |
