@@ -165,6 +165,11 @@ def get_or_create_r_container():
                     command="tail -f /dev/null",  # Keep container alive
                     volumes=volumes,
                     working_dir=working_dir,
+                    environment={
+                        "LANG": "C.UTF-8",
+                        "LC_ALL": "C.UTF-8",
+                        "DEBIAN_FRONTEND": "noninteractive"
+                    },
                     detach=True,
                     remove=False
                 )
@@ -331,17 +336,7 @@ def execute_r_script_docker(r_code: str, timeout: int = 60) -> tuple[str, str, i
 
         enhanced_r_code = f"""# Set UTF-8 encoding (suppress all warnings and messages)
 suppressWarnings(suppressMessages({{
-    tryCatch({{
-        Sys.setlocale("LC_ALL", "en_US.UTF-8")
-    }}, error = function(e) {{
-        # Fallback to C.UTF-8 if en_US.UTF-8 is not available
-        tryCatch({{
-            Sys.setlocale("LC_ALL", "C.UTF-8")
-        }}, error = function(e2) {{
-            # Final fallback
-            Sys.setlocale("LC_ALL", "")
-        }})
-    }})
+    Sys.setlocale("LC_ALL", "C.UTF-8")
 }}))
 options(encoding = "UTF-8")
 
@@ -379,15 +374,8 @@ options(encoding = "UTF-8")
         exec_result = container.exec_run([
             "Rscript", "--encoding=UTF-8", script_name
         ], environment={
-            "LANG": "en_US.UTF-8", 
-            "LC_ALL": "en_US.UTF-8",
-            "LC_CTYPE": "en_US.UTF-8",
-            "LC_COLLATE": "en_US.UTF-8",
-            "LC_TIME": "en_US.UTF-8",
-            "LC_MESSAGES": "en_US.UTF-8",
-            "LC_MONETARY": "en_US.UTF-8",
-            "LC_PAPER": "en_US.UTF-8",
-            "LC_MEASUREMENT": "en_US.UTF-8"
+            "LANG": "C.UTF-8", 
+            "LC_ALL": "C.UTF-8"
         })
         
         # Clean up the temporary file
@@ -856,6 +844,11 @@ def initialize_r_container() -> dict:
                     command="tail -f /dev/null",
                     volumes=volumes,
                     working_dir=working_dir,
+                    environment={
+                        "LANG": "C.UTF-8",
+                        "LC_ALL": "C.UTF-8",
+                        "DEBIAN_FRONTEND": "noninteractive"
+                    },
                     detach=True,
                     remove=False
                 )
