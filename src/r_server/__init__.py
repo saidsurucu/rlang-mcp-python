@@ -1253,37 +1253,77 @@ def list_r_packages(
         }
     
     list_script = f'''
-    installed <- as.data.frame(installed.packages())
-    if ("{pattern}" != "") {{
-      installed <- installed[grepl("{pattern}", installed$Package, ignore.case=TRUE), ]
-    }}
+    # Redirect all output to /dev/null except our final JSON
+    sink("/dev/null", type = "message")
+    sink("/dev/null", type = "output")
     
-    if (nrow(installed) > 0) {{
-      for(i in 1:min(nrow(installed), 50)) {{
-        cat(installed$Package[i], "|", installed$Version[i], "\\n")
-      }}
-    }} else {{
-      cat("NO_PACKAGES\\n")
-    }}
+    suppressWarnings(suppressMessages({{
+        library(jsonlite)
+        
+        installed <- as.data.frame(installed.packages())
+        if ("{pattern}" != "") {{
+          installed <- installed[grepl("{pattern}", installed$Package, ignore.case=TRUE), ]
+        }}
+        
+        # Limit to first 50 packages
+        if (nrow(installed) > 50) {{
+          installed <- installed[1:50, ]
+        }}
+        
+        # Restore output for final JSON
+        sink()
+        sink()
+        
+        if (nrow(installed) > 0) {{
+          result <- data.frame(
+            name = installed$Package,
+            version = installed$Version,
+            stringsAsFactors = FALSE
+          )
+          cat(toJSON(result, auto_unbox = TRUE))
+        }} else {{
+          cat("[]")
+        }}
+    }}))
     '''
     
     stdout, stderr, returncode = execute_r_script_docker(list_script, timeout=30)
     
-    if "NO_PACKAGES" in stdout:
-        return {"success": True, "packages": [], "count": 0}
+    if returncode != 0:
+        return {
+            "success": False,
+            "packages": [],
+            "count": 0,
+            "message": f"Failed to list packages: {stderr}"
+        }
     
-    packages = []
-    for line in stdout.strip().split("\\n"):
-        if "|" in line:
-            name, version = line.split("|", 1)
-            packages.append({"name": name.strip(), "version": version.strip()})
-    
-    return {
-        "success": True,
-        "packages": packages,
-        "count": len(packages),
-        "message": f"Found {len(packages)} packages"
-    }
+    try:
+        import json
+        packages = json.loads(stdout.strip())
+        
+        if not packages:  # Empty array
+            return {
+                "success": True,
+                "packages": [],
+                "count": 0,
+                "message": "No packages found"
+            }
+        
+        return {
+            "success": True,
+            "packages": packages,
+            "count": len(packages),
+            "message": f"Found {len(packages)} packages"
+        }
+        
+    except json.JSONDecodeError as e:
+        return {
+            "success": False,
+            "packages": [],
+            "count": 0,
+            "message": f"Failed to parse package list: {str(e)}",
+            "raw_output": stdout[:500]
+        }
 
 def initialize_server():
     """Initialize the server."""
