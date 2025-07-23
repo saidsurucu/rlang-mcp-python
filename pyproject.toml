@@ -42,9 +42,6 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/r_server"]
 
-# Include package data files
-[tool.hatch.build.targets.wheel.force-include]
-"src/r_server/Dockerfile.r-server" = "r_server/Dockerfile.r-server"
 
 [tool.ruff]
 target-version = "py312"
