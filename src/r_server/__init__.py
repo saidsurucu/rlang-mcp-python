@@ -772,6 +772,8 @@ def list_files(
         if returncode == 0:
             import json
             try:
+                # Debug: print what R returned
+                print(f"R script stdout: {repr(stdout[:500])}", file=sys.stderr)
                 files_data = json.loads(stdout)
                 # Convert to list of dicts if it's not empty
                 if files_data and isinstance(files_data, dict) and any(files_data.values()):
@@ -804,11 +806,13 @@ def list_files(
                 set_cached_result(cache_key, result_dict)
                 return result_dict
                 
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
                 return {
                     "success": False,
-                    "error": "Failed to parse file list from R",
-                    "message": "Could not decode JSON output"
+                    "error": f"Failed to parse file list from R: {str(e)}",
+                    "message": "Could not decode JSON output",
+                    "raw_output": stdout[:500],
+                    "stderr": stderr[:500] if stderr else ""
                 }
         else:
             return {
