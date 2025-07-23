@@ -327,16 +327,18 @@ def execute_r_script_docker(r_code: str, timeout: int = 60) -> tuple[str, str, i
 
 """
 
-        enhanced_r_code = f"""# Set UTF-8 encoding
-tryCatch({{
-    Sys.setlocale("LC_ALL", "en_US.UTF-8")
-}}, error = function(e) {{
-    # Fallback to C.UTF-8 if en_US.UTF-8 is not available
+        enhanced_r_code = f"""# Set UTF-8 encoding (suppress warnings)
+suppressWarnings({{
     tryCatch({{
-        Sys.setlocale("LC_ALL", "C.UTF-8")
-    }}, error = function(e2) {{
-        # Final fallback
-        Sys.setlocale("LC_ALL", "")
+        Sys.setlocale("LC_ALL", "en_US.UTF-8")
+    }}, error = function(e) {{
+        # Fallback to C.UTF-8 if en_US.UTF-8 is not available
+        tryCatch({{
+            Sys.setlocale("LC_ALL", "C.UTF-8")
+        }}, error = function(e2) {{
+            # Final fallback
+            Sys.setlocale("LC_ALL", "")
+        }})
     }})
 }})
 options(encoding = "UTF-8")
@@ -722,7 +724,6 @@ def list_files(
     from datetime import datetime
     
     # If we have a mounted directory, list files from inside the container
-    print(f"DEBUG list_files: MOUNTED_DIRECTORY = {MOUNTED_DIRECTORY}", file=sys.stderr)
     if MOUNTED_DIRECTORY:
         # Use R to list files inside the container
         type_extensions = {
@@ -733,39 +734,42 @@ def list_files(
         }
         
         r_code = f"""
-        library(jsonlite)
-        
-        # Get list of files
-        pattern <- "{pattern}"
-        type_filter <- {type_extensions[file_type]}
-        
-        # List all files in the current directory
-        all_files <- list.files(path = ".", pattern = pattern, recursive = TRUE, full.names = TRUE)
-        
-        # Filter by type if needed
-        if (!is.null(type_filter)) {{
-            ext_pattern <- paste0("\\\\.(", paste(type_filter, collapse = "|"), ")$")
-            all_files <- all_files[grepl(ext_pattern, all_files, ignore.case = TRUE)]
-        }}
-        
-        # Get file info
-        file_info <- data.frame()
-        if (length(all_files) > 0) {{
-            file_info <- data.frame(
-                name = basename(all_files),
-                path = all_files,
-                size_bytes = file.size(all_files),
-                size_mb = round(file.size(all_files) / (1024*1024), 2),
-                modified = format(file.mtime(all_files), "%Y-%m-%d %H:%M:%S"),
-                extension = tools::file_ext(all_files),
-                stringsAsFactors = FALSE
-            )
-            # Add container paths
-            file_info$container_path <- paste0("/data/", file_info$path)
-        }}
-        
-        # Convert to JSON
-        cat(toJSON(file_info, auto_unbox = TRUE))
+        # Suppress all warnings and messages for clean JSON output
+        suppressWarnings(suppressMessages({{
+            library(jsonlite)
+            
+            # Get list of files
+            pattern <- "{pattern}"
+            type_filter <- {type_extensions[file_type]}
+            
+            # List all files in the current directory
+            all_files <- list.files(path = ".", pattern = pattern, recursive = TRUE, full.names = TRUE)
+            
+            # Filter by type if needed
+            if (!is.null(type_filter)) {{
+                ext_pattern <- paste0("\\\\.(", paste(type_filter, collapse = "|"), ")$")
+                all_files <- all_files[grepl(ext_pattern, all_files, ignore.case = TRUE)]
+            }}
+            
+            # Get file info
+            file_info <- data.frame()
+            if (length(all_files) > 0) {{
+                file_info <- data.frame(
+                    name = basename(all_files),
+                    path = all_files,
+                    size_bytes = file.size(all_files),
+                    size_mb = round(file.size(all_files) / (1024*1024), 2),
+                    modified = format(file.mtime(all_files), "%Y-%m-%d %H:%M:%S"),
+                    extension = tools::file_ext(all_files),
+                    stringsAsFactors = FALSE
+                )
+                # Add container paths
+                file_info$container_path <- paste0("/data/", file_info$path)
+            }}
+            
+            # Convert to JSON - only output JSON, nothing else
+            cat(toJSON(file_info, auto_unbox = TRUE))
+        }}))
         """
         
         stdout, stderr, returncode = execute_r_script_docker(r_code, timeout=30)
@@ -773,8 +777,6 @@ def list_files(
         if returncode == 0:
             import json
             try:
-                # Debug: print what R returned
-                print(f"R script stdout: {repr(stdout[:500])}", file=sys.stderr)
                 files_data = json.loads(stdout)
                 # Convert to list of dicts if it's not empty
                 if files_data and isinstance(files_data, dict) and any(files_data.values()):
