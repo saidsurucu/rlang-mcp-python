@@ -180,12 +180,14 @@ def get_or_create_r_container():
         if not container:
             raise RuntimeError("Could not create container with any available image")
         
-        # Install locale support for Turkish characters
+        # Install locale support for UTF-8 characters
         print("Setting up UTF-8 locale support...", file=sys.stderr)
         locale_setup = container.exec_run([
             "sh", "-c", 
             "apt-get update -qq && apt-get install -y --no-install-recommends locales && "
-            "locale-gen en_US.UTF-8 C.UTF-8 && update-locale"
+            "locale-gen en_US.UTF-8 C.UTF-8 && "
+            "echo 'LANG=en_US.UTF-8' > /etc/default/locale && "
+            "echo 'LC_ALL=en_US.UTF-8' >> /etc/default/locale"
         ])
         if locale_setup.exit_code == 0:
             print("✓ UTF-8 locale support installed", file=sys.stderr)
@@ -376,7 +378,17 @@ options(encoding = "UTF-8")
         # Execute the R script file with UTF-8 environment
         exec_result = container.exec_run([
             "Rscript", "--encoding=UTF-8", script_name
-        ], environment={"LANG": "en_US.UTF-8", "LC_ALL": "en_US.UTF-8"})
+        ], environment={
+            "LANG": "en_US.UTF-8", 
+            "LC_ALL": "en_US.UTF-8",
+            "LC_CTYPE": "en_US.UTF-8",
+            "LC_COLLATE": "en_US.UTF-8",
+            "LC_TIME": "en_US.UTF-8",
+            "LC_MESSAGES": "en_US.UTF-8",
+            "LC_MONETARY": "en_US.UTF-8",
+            "LC_PAPER": "en_US.UTF-8",
+            "LC_MEASUREMENT": "en_US.UTF-8"
+        })
         
         # Clean up the temporary file
         container.exec_run(["rm", script_name])
