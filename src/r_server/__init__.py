@@ -697,12 +697,12 @@ def list_files(
         cat(toJSON(file_info, auto_unbox = TRUE))
         """
         
-        result = execute_r_script_docker(r_code, timeout=30)
+        stdout, stderr, returncode = execute_r_script_docker(r_code, timeout=30)
         
-        if result['success']:
+        if returncode == 0:
             import json
             try:
-                files_data = json.loads(result['output'])
+                files_data = json.loads(stdout)
                 # Convert to list of dicts if it's not empty
                 if files_data and isinstance(files_data, dict) and any(files_data.values()):
                     files_list = []
@@ -743,7 +743,7 @@ def list_files(
         else:
             return {
                 "success": False,
-                "error": result.get('error', 'Unknown error'),
+                "error": stderr if stderr else "R script failed",
                 "message": "Failed to list files in container"
             }
     
