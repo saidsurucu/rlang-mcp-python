@@ -607,24 +607,24 @@ def execute_r_script(
     # Check if container is ready
     global R_CONTAINER
     if not R_CONTAINER:
-        # Try to initialize container automatically
+        # Try to create container automatically
         try:
-            init_result = initialize_r_container()
-            if not init_result.get("success", False):
+            get_or_create_r_container()
+            if not R_CONTAINER:
                 return {
                     "success": False,
                     "returncode": -1,
                     "stdout": "",
-                    "stderr": "Failed to initialize R container: " + init_result.get("message", "Unknown error"),
-                    "summary": "Container initialization failed"
+                    "stderr": "Failed to create R container",
+                    "summary": "Container creation failed"
                 }
         except Exception as e:
             return {
                 "success": False,
                 "returncode": -1,
                 "stdout": "",
-                "stderr": f"Failed to initialize R container: {str(e)}",
-                "summary": "Container initialization failed"
+                "stderr": f"Failed to create R container: {str(e)}",
+                "summary": "Container creation failed"
             }
     
     # Check cache first
