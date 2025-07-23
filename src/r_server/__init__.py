@@ -796,8 +796,11 @@ CMD ["tail", "-f", "/dev/null"]
         if not container:
             raise RuntimeError("Could not create container with any available image")
         
-        # Quick package verification for our optimized image
-        if "r-server-mcp" in str(container.image.tags):
+        # Install/verify packages based on image type
+        image_tags = str(container.image.tags)
+        print(f"📋 Container using image: {image_tags}", file=sys.stderr)
+        
+        if "r-server-mcp" in image_tags:
             print("🔍 Verifying packages in optimized image...", file=sys.stderr)
             verify_result = container.exec_run([
                 "Rscript", "-e", 
@@ -805,6 +808,39 @@ CMD ["tail", "-f", "/dev/null"]
             ])
             if verify_result.exit_code == 0:
                 print("✅ All packages verified and ready", file=sys.stderr)
+        else:
+            # Install packages for fallback images (r-base, tidyverse)
+            print("📦 Installing R packages in container (one-time setup)...", file=sys.stderr)
+            
+            # Quick install script for essential packages
+            install_script = '''
+            options(repos = c(CRAN = "https://cloud.r-project.org/"))
+            cat("Installing essential R packages...\\n")
+            
+            # Install essential packages
+            packages <- c("readxl", "writexl", "dplyr", "tidyr", "ggplot2")
+            for(pkg in packages) {
+              if(!require(pkg, character.only=TRUE, quietly=TRUE)) {
+                cat("Installing", pkg, "...\\n")
+                install.packages(pkg, quiet=TRUE)
+                if(!require(pkg, character.only=TRUE, quietly=TRUE)) {
+                  cat("Failed to install", pkg, "\\n")
+                } else {
+                  cat("✓", pkg, "installed\\n")
+                }
+              } else {
+                cat("✓", pkg, "already available\\n")
+              }
+            }
+            cat("Package installation complete!\\n")
+            '''
+            
+            install_result = container.exec_run(["Rscript", "-e", install_script])
+            if install_result.exit_code == 0:
+                print("✅ R packages installed successfully", file=sys.stderr)
+            else:
+                print(f"⚠️ Package installation had issues, but continuing...", file=sys.stderr)
+                print(f"Install output: {install_result.output.decode()[:500]}", file=sys.stderr)
         
         R_CONTAINER = container.id
         
