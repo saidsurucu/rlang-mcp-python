@@ -651,6 +651,106 @@ def list_files(
     from pathlib import Path
     from datetime import datetime
     
+    # If we have a mounted directory, list files from inside the container
+    if MOUNTED_DIRECTORY:
+        # Use R to list files inside the container
+        type_extensions = {
+            "excel": "c('xlsx', 'xls')",
+            "csv": "c('csv', 'tsv')",
+            "text": "c('txt')",
+            "all": "NULL"
+        }
+        
+        r_code = f"""
+        library(jsonlite)
+        
+        # Get list of files
+        pattern <- "{pattern}"
+        type_filter <- {type_extensions[file_type]}
+        
+        # List all files in the current directory
+        all_files <- list.files(path = ".", pattern = pattern, recursive = TRUE, full.names = TRUE)
+        
+        # Filter by type if needed
+        if (!is.null(type_filter)) {{
+            ext_pattern <- paste0("\\\\.(", paste(type_filter, collapse = "|"), ")$")
+            all_files <- all_files[grepl(ext_pattern, all_files, ignore.case = TRUE)]
+        }}
+        
+        # Get file info
+        file_info <- data.frame()
+        if (length(all_files) > 0) {{
+            file_info <- data.frame(
+                name = basename(all_files),
+                path = all_files,
+                size_bytes = file.size(all_files),
+                size_mb = round(file.size(all_files) / (1024*1024), 2),
+                modified = format(file.mtime(all_files), "%Y-%m-%d %H:%M:%S"),
+                extension = tools::file_ext(all_files),
+                stringsAsFactors = FALSE
+            )
+            # Add container paths
+            file_info$container_path <- paste0("/data/", file_info$path)
+        }}
+        
+        # Convert to JSON
+        cat(toJSON(file_info, auto_unbox = TRUE))
+        """
+        
+        result = execute_r_script_docker(r_code, timeout=30)
+        
+        if result['success']:
+            import json
+            try:
+                files_data = json.loads(result['output'])
+                # Convert to list of dicts if it's not empty
+                if files_data and isinstance(files_data, dict) and any(files_data.values()):
+                    files_list = []
+                    num_files = len(files_data.get('name', []))
+                    for i in range(num_files):
+                        files_list.append({
+                            "name": files_data['name'][i] if isinstance(files_data['name'], list) else files_data['name'],
+                            "path": files_data['container_path'][i] if isinstance(files_data['container_path'], list) else files_data['container_path'],
+                            "size_bytes": files_data['size_bytes'][i] if isinstance(files_data['size_bytes'], list) else files_data['size_bytes'],
+                            "size_mb": files_data['size_mb'][i] if isinstance(files_data['size_mb'], list) else files_data['size_mb'],
+                            "modified": files_data['modified'][i] if isinstance(files_data['modified'], list) else files_data['modified'],
+                            "extension": files_data['extension'][i] if isinstance(files_data['extension'], list) else files_data['extension'],
+                            "directory": "container"
+                        })
+                else:
+                    files_list = []
+                    
+                result_dict = {
+                    "success": True,
+                    "files": files_list,
+                    "count": len(files_list),
+                    "message": f"Found {len(files_list)} files in container",
+                    "search_pattern": pattern,
+                    "file_type_filter": file_type,
+                    "container_path_info": "Files are accessible at /data/ in the container",
+                    "mounted_directory": str(MOUNTED_DIRECTORY)
+                }
+                
+                set_cached_result(cache_key, result_dict)
+                return result_dict
+                
+            except json.JSONDecodeError:
+                return {
+                    "success": False,
+                    "error": "Failed to parse file list from R",
+                    "message": "Could not decode JSON output"
+                }
+        else:
+            return {
+                "success": False,
+                "error": result.get('error', 'Unknown error'),
+                "message": "Failed to list files in container"
+            }
+    
+    # If no mounted directory, use the original Python implementation
+    from pathlib import Path
+    from datetime import datetime
+    
     try:
         base_dir = get_working_directory()
         search_dirs = [base_dir, base_dir / "r_workspace"]
