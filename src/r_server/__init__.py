@@ -278,6 +278,8 @@ def execute_r_script_docker(r_code: str, timeout: int = 60) -> tuple[str, str, i
     """Execute R script in persistent Docker container using file approach."""
     try:
         container = get_or_create_r_container()
+        if not container:
+            return "", "Failed to get or create R container", -1
         
         # Create a temporary R script file in the container
         import uuid
@@ -605,13 +607,25 @@ def execute_r_script(
     # Check if container is ready
     global R_CONTAINER
     if not R_CONTAINER:
-        return {
-            "success": False,
-            "returncode": -1,
-            "stdout": "",
-            "stderr": "R container not initialized. Please run initialize_r_container first.",
-            "summary": "Container not ready"
-        }
+        # Try to initialize container automatically
+        try:
+            init_result = initialize_r_container()
+            if not init_result.get("success", False):
+                return {
+                    "success": False,
+                    "returncode": -1,
+                    "stdout": "",
+                    "stderr": "Failed to initialize R container: " + init_result.get("message", "Unknown error"),
+                    "summary": "Container initialization failed"
+                }
+        except Exception as e:
+            return {
+                "success": False,
+                "returncode": -1,
+                "stdout": "",
+                "stderr": f"Failed to initialize R container: {str(e)}",
+                "summary": "Container initialization failed"
+            }
     
     # Check cache first
     cache_key = get_cache_key("execute_r", {"code": code})
