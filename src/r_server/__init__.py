@@ -282,10 +282,29 @@ def execute_r_script_docker(r_code: str, timeout: int = 60) -> tuple[str, str, i
         
 # Debug messages removed for cleaner output
         
-        # Add UTF-8 encoding support to R code
+        # Add UTF-8 encoding support and path info to R code
+        path_info = ""
+        if MOUNTED_DIRECTORY:
+            path_info = f"""# MOUNTED DIRECTORY INFO:
+# Host directory: {MOUNTED_DIRECTORY}
+# Container path: /data
+# Use /data/ prefix for mounted files
+# Example: read_excel("/data/your_file.xlsx")
+
+"""
+
         enhanced_r_code = f"""# Set UTF-8 encoding
 Sys.setlocale("LC_ALL", "en_US.UTF-8")
 options(encoding = "UTF-8")
+
+{path_info}# Working directory info
+cat("Current working directory:", getwd(), "\\n")
+if (dir.exists("/data")) {{
+  cat("Mounted files in /data:\\n")
+  print(list.files("/data", full.names = TRUE))
+}} else {{
+  cat("No mounted directory found\\n")
+}}
 
 {cleaned_r_code}
 """
@@ -652,13 +671,20 @@ def list_files(
         
         sorted_files = sorted(unique_files.values(), key=lambda x: x["modified"], reverse=True)
         
+        # Add container path info for R usage
+        container_info = ""
+        if MOUNTED_DIRECTORY:
+            container_info = f"To use in R code, prefix with '/data/' (e.g., read_excel('/data/filename.xlsx'))"
+        
         result = {
             "success": True,
             "files": sorted_files,
             "count": len(sorted_files),
             "message": f"Found {len(sorted_files)} files",
             "search_pattern": pattern,
-            "file_type_filter": file_type
+            "file_type_filter": file_type,
+            "container_path_info": container_info,
+            "mounted_directory": str(MOUNTED_DIRECTORY) if MOUNTED_DIRECTORY else None
         }
         
         set_cached_result(cache_key, result)
