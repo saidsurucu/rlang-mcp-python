@@ -641,7 +641,23 @@ def execute_r_script(
             custom_code=code
         )
         
-        stdout, stderr, returncode = execute_r_script_docker(enhanced_code, timeout)
+        docker_result = execute_r_script_docker(enhanced_code, timeout)
+        
+        if docker_result is None or len(docker_result) != 3:
+            return {
+                "success": False,
+                "returncode": -1,
+                "stdout": "",
+                "stderr": "Docker execution returned invalid result",
+                "summary": "Docker execution failed"
+            }
+        
+        stdout, stderr, returncode = docker_result
+        
+        # Ensure all values are strings or integers
+        stdout = str(stdout) if stdout is not None else ""
+        stderr = str(stderr) if stderr is not None else ""
+        returncode = int(returncode) if returncode is not None else -1
         
         result = {
             "success": returncode == 0,
