@@ -1041,7 +1041,7 @@ def container_status() -> dict:
         return {
             "status": "not_initialized",
             "message": "No R container is currently running",
-            "container_id": None
+            "container_id": "none"
         }
     
     try:
@@ -1049,11 +1049,11 @@ def container_status() -> dict:
         container = client.containers.get(R_CONTAINER)
         
         return {
-            "status": container.status,
-            "container_id": container.id[:12],
-            "image": container.image.tags[0] if container.image.tags else "unknown",
+            "status": str(container.status),
+            "container_id": str(container.id[:12]),
+            "image": str(container.image.tags[0] if container.image.tags else "unknown"),
             "message": f"Container is {container.status}",
-            "uptime": container.attrs.get("State", {}).get("StartedAt", "unknown")
+            "uptime": str(container.attrs.get("State", {}).get("StartedAt", "unknown"))
         }
         
     except docker.errors.NotFound:
@@ -1061,13 +1061,13 @@ def container_status() -> dict:
         return {
             "status": "not_found",
             "message": "Container was removed externally",
-            "container_id": None
+            "container_id": "none"
         }
     except Exception as e:
         return {
             "status": "error",
             "message": f"Error checking container: {str(e)}",
-            "container_id": R_CONTAINER[:12] if R_CONTAINER else None
+            "container_id": str(R_CONTAINER[:12]) if R_CONTAINER else "none"
         }
 
 # Additional tool implementations
