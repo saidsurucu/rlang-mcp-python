@@ -145,8 +145,8 @@ def get_or_create_r_container():
         
         print("Creating persistent R container...", file=sys.stderr)
         
-        # Use rocker/tidyverse as primary - has all packages pre-installed
-        images_to_try = ["rocker/tidyverse:latest", "r-base:latest"]
+        # Use semoss/docker-r-packages as primary - has comprehensive R packages pre-installed
+        images_to_try = ["semoss/docker-r-packages:latest", "rocker/tidyverse:latest", "r-base:latest"]
         container = None
         
         for image in images_to_try:
@@ -183,7 +183,10 @@ def get_or_create_r_container():
         # Check what image we're using and install packages accordingly
         image_name = container.image.tags[0] if container.image.tags else "unknown"
         
-        if "r-server-mcp" in image_name:
+        if "semoss/docker-r-packages" in image_name:
+            # semoss image has comprehensive R packages pre-installed
+            print("✓ Using semoss/docker-r-packages - comprehensive packages pre-installed", file=sys.stderr)
+        elif "r-server-mcp" in image_name:
             # Our optimized image - all packages pre-installed
             print("✓ Using r-server-mcp - all packages pre-installed", file=sys.stderr)
             # Just verify packages are available
@@ -393,6 +396,7 @@ file.copy(temp_plot, "{output_path}")
 # Load common packages (already installed in persistent container)  
 suppressPackageStartupMessages({{
   library(readxl)
+  library(writexl)
   library(dplyr)
   library(tidyr)
   library(ggplot2)
@@ -738,8 +742,8 @@ def initialize_r_container() -> dict:
         
         # rocker/tidyverse will be auto-pulled if not available
         
-        # Use rocker/rstudio as primary - more stable and widely available
-        images_to_try = ["rocker/rstudio:latest", "rocker/tidyverse:latest", "r-base:latest"]
+        # Use semoss/docker-r-packages as primary - has comprehensive R packages pre-installed
+        images_to_try = ["semoss/docker-r-packages:latest", "rocker/rstudio:latest", "rocker/tidyverse:latest", "r-base:latest"]
         container = None
         
         for image in images_to_try:
