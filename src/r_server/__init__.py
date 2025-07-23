@@ -626,6 +626,10 @@ def list_files(
         }
         
         r_code = f"""
+        # Redirect ALL output to /dev/null first
+        sink("/dev/null", type = "message")
+        sink("/dev/null", type = "output")
+        
         # Suppress all warnings and messages for clean JSON output
         suppressWarnings(suppressMessages({{
             library(jsonlite)
@@ -658,6 +662,10 @@ def list_files(
                 # Add container paths
                 file_info$container_path <- paste0("/data/", file_info$path)
             }}
+            
+            # Restore output only for final JSON
+            sink()
+            sink()
             
             # Convert to JSON - only output JSON, nothing else
             cat(toJSON(file_info, auto_unbox = TRUE))
@@ -1008,11 +1016,20 @@ def install_r_package(
     # Install script
     if version:
         install_script = f'''
+        # Redirect all output to /dev/null first
+        sink("/dev/null", type = "message")
+        sink("/dev/null", type = "output")
+        
         suppressWarnings(suppressMessages({{
             if (!requireNamespace("devtools", quietly = TRUE)) {{
               install.packages("devtools", repos="{repo}", quiet=TRUE)
             }}
             devtools::install_version("{package_name}", version = "{version}", repos = "{repo}")
+            
+            # Restore output for final result
+            sink()
+            sink()
+            
             if (requireNamespace("{package_name}", quietly = TRUE)) {{
               cat("SUCCESS\\n")
               cat("Version:", as.character(packageVersion("{package_name}")), "\\n")
@@ -1023,8 +1040,17 @@ def install_r_package(
         '''
     else:
         install_script = f'''
+        # Redirect all output to /dev/null first
+        sink("/dev/null", type = "message")
+        sink("/dev/null", type = "output")
+        
         suppressWarnings(suppressMessages({{
             install.packages("{package_name}", repos="{repo}", quiet=TRUE)
+            
+            # Restore output for final result
+            sink()
+            sink()
+            
             if (requireNamespace("{package_name}", quietly = TRUE)) {{
               cat("SUCCESS\\n")
               cat("Version:", as.character(packageVersion("{package_name}")), "\\n")
