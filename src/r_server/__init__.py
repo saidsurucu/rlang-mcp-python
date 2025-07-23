@@ -327,8 +327,8 @@ def execute_r_script_docker(r_code: str, timeout: int = 60) -> tuple[str, str, i
 
 """
 
-        enhanced_r_code = f"""# Set UTF-8 encoding (suppress warnings)
-suppressWarnings({{
+        enhanced_r_code = f"""# Set UTF-8 encoding (suppress all warnings and messages)
+suppressWarnings(suppressMessages({{
     tryCatch({{
         Sys.setlocale("LC_ALL", "en_US.UTF-8")
     }}, error = function(e) {{
@@ -340,19 +340,10 @@ suppressWarnings({{
             Sys.setlocale("LC_ALL", "")
         }})
     }})
-}})
+}}))
 options(encoding = "UTF-8")
 
-{path_info}# Working directory info
-cat("Current working directory:", getwd(), "\\n")
-if (dir.exists("/data")) {{
-  cat("Mounted files in /data:\\n")
-  print(list.files("/data", full.names = TRUE))
-}} else {{
-  cat("No mounted directory found\\n")
-}}
-
-{cleaned_r_code}
+{path_info}{cleaned_r_code}
 """
         
         # Write R code to file using Python's file writing approach
@@ -420,21 +411,6 @@ def cleanup_r_container():
 
 # Precompiled R script templates
 R_SCRIPT_TEMPLATES = {
-    "ggplot_base": """
-# Load required packages (already installed in persistent container)
-suppressPackageStartupMessages({{
-  library(ggplot2)
-  library(cowplot)
-}})
-
-# Container working directory is already set correctly
-{custom_code}
-
-# Save plot to temporary location then copy to output
-temp_plot <- "/tmp/temp_plot.{format}"
-ggsave(temp_plot, width = {width}/{dpi}, height = {height}/{dpi}, dpi = {dpi})
-file.copy(temp_plot, "{output_path}")
-""",
     "execute_base": """
 # Load common packages (already installed in persistent container)  
 suppressPackageStartupMessages({{
@@ -527,90 +503,6 @@ def mount_directory(
 
 
 # Main synchronous tools (FastMCP works better with sync)
-@mcp.tool(
-    name="render_ggplot",
-    description="Create ggplot2 visualizations. Pass R code with ggplot commands.",
-    annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False}
-)
-def render_ggplot(
-    code: Annotated[str, Field(description="R code using ggplot2 syntax (e.g., 'ggplot(data) + geom_point(aes(x, y))')")],
-    output_type: Annotated[Literal["png", "jpeg", "pdf", "svg"], Field(description="Image format for output")] = "png",
-    width: Annotated[int, Field(description="Image width in pixels", ge=100, le=4000)] = 800,
-    height: Annotated[int, Field(description="Image height in pixels", ge=100, le=4000)] = 600,
-    resolution: Annotated[int, Field(description="DPI resolution for image quality", ge=50, le=300)] = 96,
-    use_cache: Annotated[bool, Field(description="Use cached results for identical plots")] = True
-) -> dict:
-    """Create ggplot2 visualizations. Pass R code with ggplot commands."""
-    
-    # Check if container is ready
-    global R_CONTAINER
-    if not R_CONTAINER:
-        return {
-            "success": False,
-            "message": "R container not initialized. Please run initialize_r_container first."
-        }
-    
-    # Check cache first
-    if use_cache:
-        cache_key = get_cache_key("render_ggplot", {
-            "code": code,
-            "output_type": output_type,
-            "width": width,
-            "height": height,
-            "resolution": resolution
-        })
-        cached = get_cached_result(cache_key)
-        if cached:
-            return cached
-    
-    # Compile script from template
-    with tempfile.TemporaryDirectory(prefix="ggplot-") as temp_dir:
-        output_path = Path(temp_dir) / f"output.{output_type}"
-        
-        script = compile_r_script(
-            "ggplot_base",
-            custom_code=code,
-            output_path=output_path,
-            format=output_type,
-            width=width,
-            height=height,
-            dpi=resolution
-        )
-        
-        # Execute with Docker
-        stdout, stderr, returncode = execute_r_script_docker(script, 30)
-        
-        if returncode != 0:
-            raise RuntimeError(f"R script failed: {stderr}")
-        
-        if not output_path.exists():
-            raise RuntimeError("Output file not created")
-        
-        # Read and encode image
-        image_data = output_path.read_bytes()
-        base64_data = base64.b64encode(image_data).decode('utf-8')
-        
-        mime_types = {
-            "png": "image/png",
-            "jpeg": "image/jpeg",
-            "pdf": "application/pdf",
-            "svg": "image/svg+xml"
-        }
-        
-        result = {
-            "type": "image",
-            "format": output_type,
-            "data": base64_data,
-            "mime_type": mime_types[output_type],
-            "width": width,
-            "height": height,
-            "resolution": resolution
-        }
-        
-        if use_cache:
-            set_cached_result(cache_key, result)
-        
-        return result
 
 @mcp.tool(
     name="execute_r_script",
@@ -1126,10 +1018,12 @@ def file_info(
             else:
                 try:
                     r_script = f'''
-                    library(readxl)
-                    file_path <- "{file_path}"
-                    sheets <- excel_sheets(file_path)
-                    cat("SHEETS:", paste(sheets, collapse=","), "\\n")
+                    suppressWarnings(suppressMessages({{
+                        library(readxl)
+                        file_path <- "{file_path}"
+                        sheets <- excel_sheets(file_path)
+                        cat("SHEETS:", paste(sheets, collapse=","), "\\n")
+                    }}))
                     '''
                     
                     stdout, stderr, returncode = execute_r_script_docker(r_script, timeout=10)
@@ -1191,26 +1085,30 @@ def install_r_package(
     # Install script
     if version:
         install_script = f'''
-        if (!requireNamespace("devtools", quietly = TRUE)) {{
-          install.packages("devtools", repos="{repo}", quiet=TRUE)
-        }}
-        devtools::install_version("{package_name}", version = "{version}", repos = "{repo}")
-        if (requireNamespace("{package_name}", quietly = TRUE)) {{
-          cat("SUCCESS\\n")
-          cat("Version:", as.character(packageVersion("{package_name}")), "\\n")
-        }} else {{
-          cat("FAILED\\n")
-        }}
+        suppressWarnings(suppressMessages({{
+            if (!requireNamespace("devtools", quietly = TRUE)) {{
+              install.packages("devtools", repos="{repo}", quiet=TRUE)
+            }}
+            devtools::install_version("{package_name}", version = "{version}", repos = "{repo}")
+            if (requireNamespace("{package_name}", quietly = TRUE)) {{
+              cat("SUCCESS\\n")
+              cat("Version:", as.character(packageVersion("{package_name}")), "\\n")
+            }} else {{
+              cat("FAILED\\n")
+            }}
+        }}))
         '''
     else:
         install_script = f'''
-        install.packages("{package_name}", repos="{repo}", quiet=FALSE)
-        if (requireNamespace("{package_name}", quietly = TRUE)) {{
-          cat("SUCCESS\\n")
-          cat("Version:", as.character(packageVersion("{package_name}")), "\\n")
-        }} else {{
-          cat("FAILED\\n")
-        }}
+        suppressWarnings(suppressMessages({{
+            install.packages("{package_name}", repos="{repo}", quiet=TRUE)
+            if (requireNamespace("{package_name}", quietly = TRUE)) {{
+              cat("SUCCESS\\n")
+              cat("Version:", as.character(packageVersion("{package_name}")), "\\n")
+            }} else {{
+              cat("FAILED\\n")
+            }}
+        }}))
         '''
     
     stdout, stderr, returncode = execute_r_script_docker(install_script, timeout=300)
