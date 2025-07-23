@@ -726,7 +726,8 @@ def initialize_r_container() -> dict:
         # rocker/tidyverse will be auto-pulled if not available
         
         # Create container with rocker/tidyverse as primary option
-        images_to_try = ["rocker/tidyverse:latest", "r-base:latest"]
+        # Try multiple tidyverse tags for better compatibility
+        images_to_try = ["rocker/tidyverse:4.3", "rocker/tidyverse:latest", "rocker/r-ver:4.3", "r-base:latest"]
         container = None
         
         for image in images_to_try:
@@ -738,9 +739,13 @@ def initialize_r_container() -> dict:
                     client.images.get(image)
                     print(f"✓ Image {image} found locally", file=sys.stderr)
                 except docker.errors.ImageNotFound:
-                    print(f"Pulling {image}...", file=sys.stderr)
-                    client.images.pull(image)
-                    print(f"✓ Image {image} pulled successfully", file=sys.stderr)
+                    try:
+                        print(f"Pulling {image}...", file=sys.stderr)
+                        client.images.pull(image)
+                        print(f"✓ Image {image} pulled successfully", file=sys.stderr)
+                    except Exception as pull_error:
+                        print(f"Failed to pull {image}: {pull_error}", file=sys.stderr)
+                        raise
                 
                 # Setup volumes
                 volumes = {}
@@ -810,10 +815,14 @@ def initialize_r_container() -> dict:
             
             install_result = container.exec_run(["Rscript", "-e", install_script])
             if install_result.exit_code == 0:
-                print("✅ R packages installed successfully", file=sys.stderr)
+                print("✅ R packages installed successfully - readxl, dplyr, ggplot2 ready!", file=sys.stderr)
             else:
                 print(f"⚠️ Package installation had issues, but continuing...", file=sys.stderr)
-                print(f"Install output: {install_result.output.decode()[:500]}", file=sys.stderr)
+                # Show last part of output which usually contains the error
+                output = install_result.output.decode() if install_result.output else ""
+                if output:
+                    lines = output.strip().split('\n')[-10:]  # Last 10 lines
+                    print(f"Last install messages: {' | '.join(lines)}", file=sys.stderr)
         
         R_CONTAINER = container.id
         
