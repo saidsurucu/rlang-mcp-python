@@ -393,7 +393,6 @@ file.copy(temp_plot, "{output_path}")
 # Load common packages (already installed in persistent container)  
 suppressPackageStartupMessages({{
   library(readxl)
-  library(writexl)
   library(dplyr)
   library(tidyr)
   library(ggplot2)
