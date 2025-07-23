@@ -733,6 +733,15 @@ def initialize_r_container() -> dict:
             try:
                 print(f"Trying to create container with {image}...", file=sys.stderr)
                 
+                # Try to pull image if not available locally
+                try:
+                    client.images.get(image)
+                    print(f"✓ Image {image} found locally", file=sys.stderr)
+                except docker.errors.ImageNotFound:
+                    print(f"Pulling {image}...", file=sys.stderr)
+                    client.images.pull(image)
+                    print(f"✓ Image {image} pulled successfully", file=sys.stderr)
+                
                 # Setup volumes
                 volumes = {}
                 working_dir = "/workspace"
