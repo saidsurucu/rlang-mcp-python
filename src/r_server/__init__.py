@@ -446,16 +446,30 @@ def mount_directory(
         workspace_path = mount_path / "r_workspace"
         workspace_path.mkdir(exist_ok=True)
         
+        # If container is already running, restart it with new mount
+        global R_CONTAINER
+        container_restarted = False
+        if R_CONTAINER:
+            try:
+                print("🔄 Restarting container with new mount...", file=sys.stderr)
+                cleanup_r_container()  # Stop current container
+                container = get_or_create_r_container()  # Create with new mount
+                container_restarted = True
+                print("✅ Container restarted with mounted directory", file=sys.stderr)
+            except Exception as e:
+                print(f"⚠️ Failed to restart container: {e}", file=sys.stderr)
+        
         # Quick file listing
         files = list(mount_path.glob("*"))[:5]
         
         result = {
             "success": True,
-            "message": "Directory mounted successfully",
+            "message": "Directory mounted successfully" + (" and container restarted" if container_restarted else ""),
             "mounted_path": str(mount_path),
             "workspace_path": str(workspace_path),
             "sample_files": [f.name for f in files],
-            "total_files": len(list(mount_path.glob("*")))
+            "total_files": len(list(mount_path.glob("*"))),
+            "container_restarted": container_restarted
         }
         
         set_cached_result(cache_key, result)
