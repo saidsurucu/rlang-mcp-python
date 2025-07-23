@@ -722,6 +722,7 @@ def list_files(
     from datetime import datetime
     
     # If we have a mounted directory, list files from inside the container
+    print(f"DEBUG list_files: MOUNTED_DIRECTORY = {MOUNTED_DIRECTORY}", file=sys.stderr)
     if MOUNTED_DIRECTORY:
         # Use R to list files inside the container
         type_extensions = {
