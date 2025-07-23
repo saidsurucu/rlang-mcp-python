@@ -40,14 +40,17 @@ This project is inspired by [gdbelvin's rlang-mcp-server](https://github.com/gdb
 
 ### 🛡️ **Security & Isolation**
 - **Mandatory Docker**: All R code execution in isolated containers
+- **Pre-built Images**: Uses optimized Docker images (semoss/docker-r-packages, rocker/rstudio)
 - **Path Sanitization**: Protection against directory traversal attacks
 - **File Access Control**: Secure file system access with proper permission checks
 - **Container Isolation**: Complete process and filesystem isolation
+- **Persistent Containers**: Single container per session for better performance
 
 ### 🚀 **Performance & Experience**
 - **FastMCP Framework**: Modern Python MCP implementation with excellent performance
 - **Smart Caching**: In-memory caching for instant repeated operations
-- **Async Execution**: Non-blocking operations for better responsiveness
+- **Persistent Containers**: Reuses same container for all operations (no startup overhead)
+- **Pre-compiled Packages**: Uses Docker images with pre-installed R packages
 - **uv Package Manager**: Lightning-fast dependency management and virtual environments
 
 ## Quick Start
@@ -182,17 +185,18 @@ python -m r_server
 
 ## Tools Available
 
-This server provides **7 comprehensive tools**:
+This server provides **8 comprehensive tools**:
 
 | Tool | Description | Category |
 |------|-------------|----------|
-| `mount_directory` | Mount a local directory for R operations | Directory Management |
-| `list_files` | List and filter workspace files | File Management |  
+| `initialize_r_container` | Initialize persistent R container | Container Management |
+| `container_status` | Check container status and info | Container Management |
+| `mount_directory` | Mount local directory to /data in container | Directory Management |
+| `list_files` | List files in container workspace | File Management |  
 | `file_info` | Get detailed file information | File Management |
 | `render_ggplot` | Generate ggplot2 visualizations | Visualization |
 | `execute_r_script` | Execute R scripts with smart file handling | Execution |
 | `install_r_package` | Install R packages on-demand | Package Management |
-| `list_r_packages` | List and search installed packages | Package Management |
 
 ## MCP Integration
 
@@ -287,21 +291,24 @@ Here's how you might interact with Claude for a full analysis:
 
 ## Docker Support
 
-Docker is mandatory and will be automatically checked on startup:
+Docker is mandatory for security. The server uses pre-built Docker images with optimized R environments:
 
 ```bash
 # Ensure Docker is running
 docker --version
 
-# The R base image will be automatically pulled on first use
-# Or you can pre-pull it:
-docker pull r-base:latest
+# Images are automatically pulled on first use:
+# - semoss/docker-r-packages (primary - comprehensive R packages)
+# - rocker/rstudio (fallback - widely used R environment)
+# - r-base:latest (final fallback - minimal R installation)
 ```
 
 The server will automatically:
 1. Check if Docker is running
-2. Pull the R base image if needed
-3. Execute all R code in isolated containers
+2. Pull the appropriate Docker image if needed
+3. Create a persistent container for the session
+4. Mount directories as /data inside the container
+5. Execute all R code in the isolated container
 
 ## Development
 

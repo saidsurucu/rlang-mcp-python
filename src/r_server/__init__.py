@@ -180,6 +180,18 @@ def get_or_create_r_container():
         if not container:
             raise RuntimeError("Could not create container with any available image")
         
+        # Install locale support for Turkish characters
+        print("Setting up UTF-8 locale support...", file=sys.stderr)
+        locale_setup = container.exec_run([
+            "sh", "-c", 
+            "apt-get update -qq && apt-get install -y --no-install-recommends locales && "
+            "locale-gen en_US.UTF-8 C.UTF-8 && update-locale"
+        ])
+        if locale_setup.exit_code == 0:
+            print("✓ UTF-8 locale support installed", file=sys.stderr)
+        else:
+            print("⚠️ Could not install full locale support, Turkish characters may not display correctly", file=sys.stderr)
+        
         # Check what image we're using and install packages accordingly
         image_name = container.image.tags[0] if container.image.tags else "unknown"
         
@@ -297,7 +309,17 @@ def execute_r_script_docker(r_code: str, timeout: int = 60) -> tuple[str, str, i
 """
 
         enhanced_r_code = f"""# Set UTF-8 encoding
-Sys.setlocale("LC_ALL", "en_US.UTF-8")
+tryCatch({{
+    Sys.setlocale("LC_ALL", "en_US.UTF-8")
+}}, error = function(e) {{
+    # Fallback to C.UTF-8 if en_US.UTF-8 is not available
+    tryCatch({{
+        Sys.setlocale("LC_ALL", "C.UTF-8")
+    }}, error = function(e2) {{
+        # Final fallback
+        Sys.setlocale("LC_ALL", "")
+    }})
+}})
 options(encoding = "UTF-8")
 
 {path_info}# Working directory info

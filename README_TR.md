@@ -45,14 +45,17 @@ Bu proje [gdbelvin'in rlang-mcp-server](https://github.com/gdbelvin/rlang-mcp-se
 
 ### 🛡️ **Güvenlik ve İzolasyon**
 - **Zorunlu Docker**: Tüm R kodu çalıştırma izole containerlarda
+- **Hazır Image'lar**: Optimize edilmiş Docker image'ları kullanır (semoss/docker-r-packages, rocker/rstudio)
 - **Path Sanitization**: Directory traversal saldırılarına karşı koruma
 - **Dosya Erişim Kontrolü**: Uygun izin kontrolleri ile güvenli dosya sistemi erişimi
 - **Container İzolasyonu**: Tam process ve dosya sistemi izolasyonu
+- **Kalıcı Container'lar**: Daha iyi performans için oturum başına tek container
 
 ### 🚀 **Performans ve Deneyim**
 - **FastMCP Framework**: Mükemmel performans ile modern Python MCP implementasyonu
 - **Akıllı Önbellek**: Tekrar işlemler için bellek içi önbellek sistemi
-- **Async Çalıştırma**: Daha iyi yanıt verme için engelleyici olmayan işlemler
+- **Kalıcı Container'lar**: Tüm işlemler için aynı container kullanılır (başlatma yükü yok)
+- **Önceden Derlenmiş Paketler**: R paketleri önceden yüklenmiş Docker image'ları kullanır
 - **uv Paket Yöneticisi**: Yıldırım hızında bağımlılık yönetimi ve sanal ortamlar
 
 ## Hızlı Başlangıç
@@ -184,17 +187,18 @@ python -m r_server
 
 ## Mevcut Araçlar
 
-Bu sunucu **7 kapsamlı araç** sunar:
+Bu sunucu **8 kapsamlı araç** sunar:
 
 | Araç | Açıklama | Kategori |
 |------|----------|----------|
-| `mount_directory` | R işlemleri için yerel dizin monte et | Dizin Yönetimi |
-| `list_files` | Çalışma alanı dosyalarını listele ve filtrele | Dosya Yönetimi |  
+| `initialize_r_container` | Kalıcı R container'ı başlat | Container Yönetimi |
+| `container_status` | Container durumu ve bilgilerini kontrol et | Container Yönetimi |
+| `mount_directory` | Yerel dizini container'da /data olarak mount et | Dizin Yönetimi |
+| `list_files` | Container çalışma alanındaki dosyaları listele | Dosya Yönetimi |  
 | `file_info` | Detaylı dosya bilgisi al | Dosya Yönetimi |
 | `render_ggplot` | ggplot2 görselleştirmeleri oluştur | Görselleştirme |
 | `execute_r_script` | Akıllı dosya işleme ile R scriptleri çalıştır | Çalıştırma |
 | `install_r_package` | İsteğe bağlı R paketi kur | Paket Yönetimi |
-| `list_r_packages` | Kurulu paketleri listele ve ara | Paket Yönetimi |
 
 ## MCP Entegrasyonu
 
@@ -289,21 +293,24 @@ Claude ile tam analiz için nasıl etkileşim kurabileceğiniz:
 
 ## Docker Desteği
 
-Docker zorunludur ve başlangıçta otomatik kontrol edilir:
+Docker güvenlik için zorunludur. Sunucu optimize edilmiş R ortamları içeren hazır Docker image'ları kullanır:
 
 ```bash
 # Docker'ın çalıştığından emin olun
 docker --version
 
-# R base image ilk kullanımda otomatik çekilir
-# Veya önceden çekebilirsiniz:
-docker pull r-base:latest
+# Image'lar ilk kullanımda otomatik çekilir:
+# - semoss/docker-r-packages (birincil - kapsamlı R paketleri)
+# - rocker/rstudio (yedek - yaygın kullanılan R ortamı)
+# - r-base:latest (son yedek - minimal R kurulumu)
 ```
 
 Sunucu otomatik olarak:
 1. Docker'ın çalışıp çalışmadığını kontrol eder
-2. Gerekirse R base image'ını çeker
-3. Tüm R kodunu izole containerlarda çalıştırır
+2. Gerekirse uygun Docker image'ını çeker
+3. Oturum için kalıcı bir container oluşturur
+4. Dizinleri container içinde /data olarak mount eder
+5. Tüm R kodunu izole container'da çalıştırır
 
 ## Geliştirme
 
