@@ -469,10 +469,12 @@ def mount_directory(
             "success": True,
             "message": "Directory mounted successfully" + (" and container restarted" if container_restarted else ""),
             "mounted_path": str(mount_path),
+            "container_path": "/data",
             "workspace_path": str(workspace_path),
             "sample_files": [f.name for f in files],
             "total_files": len(list(mount_path.glob("*"))),
-            "container_restarted": container_restarted
+            "container_restarted": container_restarted,
+            "usage_example": "Use '/data/' prefix in R code (e.g., read_excel('/data/file.xlsx'))"
         }
         
         set_cached_result(cache_key, result)
