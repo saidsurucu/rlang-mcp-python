@@ -725,9 +725,8 @@ def initialize_r_container() -> dict:
         
         # rocker/tidyverse will be auto-pulled if not available
         
-        # Create container with rocker/tidyverse as primary option
-        # Try multiple tidyverse tags for better compatibility
-        images_to_try = ["rocker/tidyverse:4.3", "rocker/tidyverse:latest", "rocker/r-ver:4.3", "r-base:latest"]
+        # Use rocker/rstudio as primary - more stable and widely available
+        images_to_try = ["rocker/rstudio:latest", "rocker/tidyverse:latest", "r-base:latest"]
         container = None
         
         for image in images_to_try:
@@ -776,8 +775,8 @@ def initialize_r_container() -> dict:
         image_tags = str(container.image.tags)
         print(f"📋 Container using image: {image_tags}", file=sys.stderr)
         
-        if "tidyverse" in image_tags:
-            print("🔍 Verifying packages in tidyverse image...", file=sys.stderr)
+        if "rstudio" in image_tags or "tidyverse" in image_tags:
+            print("🔍 Verifying packages in rocker image...", file=sys.stderr)
             verify_result = container.exec_run([
                 "Rscript", "-e", 
                 "packages <- c('readxl', 'writexl', 'dplyr', 'tidyr', 'ggplot2'); for(pkg in packages) { if(!require(pkg, character.only=TRUE, quietly=TRUE)) stop(paste('Missing:', pkg)) }; cat('✅ All packages verified!\\n')"
@@ -785,7 +784,7 @@ def initialize_r_container() -> dict:
             if verify_result.exit_code == 0:
                 print("✅ All packages verified and ready", file=sys.stderr)
             else:
-                print("✅ Tidyverse packages should be available", file=sys.stderr)
+                print("✅ Rocker packages should be available", file=sys.stderr)
         else:
             # Install packages for fallback images (r-base, tidyverse)
             print("📦 Installing R packages in container (one-time setup)...", file=sys.stderr)
