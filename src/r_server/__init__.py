@@ -145,8 +145,8 @@ def get_or_create_r_container():
         
         print("Creating persistent R container...", file=sys.stderr)
         
-        # Try to pull and use rocker/tidyverse first (has readxl and common packages pre-installed)
-        images_to_try = ["rocker/tidyverse:devel", "rocker/tidyverse:latest", "r-base:latest"]
+        # Try to use our optimized image first, then fallback to public images
+        images_to_try = ["r-server-mcp:latest", "rocker/tidyverse:latest", "r-base:latest"]
         container = None
         
         for image in images_to_try:
@@ -183,7 +183,24 @@ def get_or_create_r_container():
         # Check what image we're using and install packages accordingly
         image_name = container.image.tags[0] if container.image.tags else "unknown"
         
-        if "tidyverse" in image_name:
+        if "r-server-mcp" in image_name:
+            # Our optimized image - all packages pre-installed
+            print("✓ Using r-server-mcp - all packages pre-installed", file=sys.stderr)
+            # Just verify packages are available
+            verify_script = '''
+            cat("Verifying R packages...\\n")
+            packages <- c("readxl", "writexl", "dplyr", "tidyr", "ggplot2", "cowplot")
+            for(pkg in packages) {
+              if(!require(pkg, character.only=TRUE, quietly=TRUE)) {
+                stop(paste("Required package", pkg, "not available"))
+              }
+            }
+            cat("All packages verified!\\n")
+            '''
+            exec_result = container.exec_run(["Rscript", "-e", verify_script])
+            if exec_result.exit_code != 0:
+                print(f"Warning: Package verification failed: {exec_result.output.decode()}", file=sys.stderr)
+        elif "tidyverse" in image_name:
             # rocker/tidyverse already has most packages, just check they're available
             print("✓ Using rocker/tidyverse - most packages pre-installed", file=sys.stderr)
             tidyverse_script = '''
@@ -658,18 +675,20 @@ def list_files(
 # Docker container management tool
 @mcp.tool(
     name="initialize_r_container", 
-    description="Start R container with packages. Run this first before using other R tools.",
+    description="Start R container with packages. Automatically builds optimized image if needed.",
     annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True}
 )
 def initialize_r_container() -> dict:
-    """Start R container with packages. Run this first before using other R tools."""
+    """Start R container with packages. Automatically builds optimized image if needed."""
     global R_CONTAINER
     
     try:
+        ensure_docker()
+        client = docker.from_env()
+        
         # Clean up any existing container first
         if R_CONTAINER:
             try:
-                client = docker.from_env()
                 container = client.containers.get(R_CONTAINER)
                 container.remove(force=True)
                 print("✓ Cleaned up existing container", file=sys.stderr)
@@ -678,13 +697,122 @@ def initialize_r_container() -> dict:
             finally:
                 R_CONTAINER = None
         
-        # Create new container
-        container = get_or_create_r_container()
+        # Check if our optimized image exists, if not build it
+        try:
+            client.images.get("r-server-mcp:latest")
+            print("✓ Optimized R image found", file=sys.stderr)
+        except docker.errors.ImageNotFound:
+            print("🔨 Optimized image not found, building...", file=sys.stderr)
+            
+            # Load Dockerfile from package data
+            try:
+                import importlib.resources as pkg_resources
+                dockerfile_content = pkg_resources.files('r_server').joinpath('Dockerfile.r-server').read_text()
+            except ImportError:
+                # Fallback for older Python versions
+                import pkg_resources
+                dockerfile_content = pkg_resources.resource_string('r_server', 'Dockerfile.r-server').decode('utf-8')
+            except Exception:
+                # Embedded fallback if package data not available
+                dockerfile_content = '''# R Server MCP - Optimized Docker Image
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+
+# Install system dependencies and R packages in one layer
+RUN apt-get update && apt-get install -y \\
+    locales \\
+    r-base \\
+    r-base-dev \\
+    r-cran-readxl \\
+    r-cran-writexl \\
+    r-cran-dplyr \\
+    r-cran-tidyr \\
+    r-cran-ggplot2 \\
+    r-cran-cowplot \\
+    libcurl4-openssl-dev \\
+    libssl-dev \\
+    libxml2-dev \\
+    libfontconfig1-dev \\
+    libcairo2-dev \\
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up UTF-8 locale
+RUN locale-gen en_US.UTF-8
+
+# Set CRAN repository
+RUN echo 'options(repos = c(CRAN = "https://cloud.r-project.org/"))' >> /usr/lib/R/etc/Rprofile.site
+
+WORKDIR /workspace
+CMD ["tail", "-f", "/dev/null"]
+'''
+            
+            # Build image
+            import io
+            dockerfile_obj = io.BytesIO(dockerfile_content.encode('utf-8'))
+            
+            print("📦 Building optimized image (may take 2-3 minutes)...", file=sys.stderr)
+            
+            # Build with progress
+            for log in client.api.build(fileobj=dockerfile_obj, tag="r-server-mcp:latest", rm=True, decode=True):
+                if 'stream' in log and log['stream'].strip():
+                    print(f"Build: {log['stream'].strip()}", file=sys.stderr)
+            
+            print("✅ Optimized R image built successfully", file=sys.stderr)
+        
+        # Now create container with priority to our optimized image
+        images_to_try = ["r-server-mcp:latest", "rocker/tidyverse:latest", "r-base:latest"]
+        container = None
+        
+        for image in images_to_try:
+            try:
+                print(f"Trying to create container with {image}...", file=sys.stderr)
+                
+                # Setup volumes
+                volumes = {}
+                working_dir = "/workspace"
+                if MOUNTED_DIRECTORY:
+                    volumes[str(MOUNTED_DIRECTORY)] = {"bind": "/data", "mode": "ro"}
+                    working_dir = "/data"
+                
+                container = client.containers.run(
+                    image,
+                    command="tail -f /dev/null",
+                    volumes=volumes,
+                    working_dir=working_dir,
+                    detach=True,
+                    remove=False
+                )
+                print(f"✅ Container created with {image}", file=sys.stderr)
+                break
+                
+            except Exception as e:
+                print(f"Failed to use {image}: {str(e)}", file=sys.stderr)
+                continue
+        
+        if not container:
+            raise RuntimeError("Could not create container with any available image")
+        
+        # Quick package verification for our optimized image
+        if "r-server-mcp" in str(container.image.tags):
+            print("🔍 Verifying packages in optimized image...", file=sys.stderr)
+            verify_result = container.exec_run([
+                "Rscript", "-e", 
+                "packages <- c('readxl', 'writexl', 'dplyr', 'tidyr', 'ggplot2'); for(pkg in packages) { if(!require(pkg, character.only=TRUE, quietly=TRUE)) stop(paste('Missing:', pkg)) }; cat('✅ All packages verified!\\n')"
+            ])
+            if verify_result.exit_code == 0:
+                print("✅ All packages verified and ready", file=sys.stderr)
+        
+        R_CONTAINER = container.id
         
         return {
             "success": True,
             "container_id": container.id[:12],
-            "message": "R container initialized successfully",
+            "image_used": str(container.image.tags[0]) if container.image.tags else "unknown",
+            "message": "R container initialized successfully with optimized image",
             "status": "ready"
         }
         

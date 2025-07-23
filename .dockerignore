@@ -1,0 +1,39 @@
+# .dockerignore for R Server MCP
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.env
+
+# R specific
+.Rhistory
+.RData
+.Rproj.user/
+*.Rproj
+
+# Development files
+.git/
+.gitignore
+README*.md
+CLAUDE.md
+*.log
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test outputs
+r_workspace/
+output/
+*.png
+*.pdf
+*.svg
+*.jpeg
+
+# Documentation
+docs/
