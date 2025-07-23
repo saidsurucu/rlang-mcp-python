@@ -277,6 +277,23 @@ def get_or_create_r_container():
 def execute_r_script_docker(r_code: str, timeout: int = 60) -> tuple[str, str, int]:
     """Execute R script in persistent Docker container using file approach."""
     try:
+        # Check if current container is still valid
+        global R_CONTAINER
+        if R_CONTAINER:
+            try:
+                client = docker.from_env()
+                existing_container = client.containers.get(R_CONTAINER)
+                existing_container.reload()
+                if existing_container.status != 'running':
+                    print(f"Container {R_CONTAINER} is {existing_container.status}, recreating...", file=sys.stderr)
+                    R_CONTAINER = None
+            except docker.errors.NotFound:
+                print(f"Container {R_CONTAINER} not found, recreating...", file=sys.stderr)
+                R_CONTAINER = None
+            except Exception as e:
+                print(f"Container check failed: {e}, recreating...", file=sys.stderr)
+                R_CONTAINER = None
+        
         container = get_or_create_r_container()
         if not container:
             return "", "Failed to get or create R container", -1
