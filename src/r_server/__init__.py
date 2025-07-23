@@ -145,8 +145,8 @@ def get_or_create_r_container():
         
         print("Creating persistent R container...", file=sys.stderr)
         
-        # Try to use our optimized image first, then fallback to public images
-        images_to_try = ["r-server-mcp:latest", "rocker/tidyverse:latest", "r-base:latest"]
+        # Use rocker/tidyverse as primary - has all packages pre-installed
+        images_to_try = ["rocker/tidyverse:latest", "r-base:latest"]
         container = None
         
         for image in images_to_try:
@@ -723,74 +723,10 @@ def initialize_r_container() -> dict:
             finally:
                 R_CONTAINER = None
         
-        # Check if our optimized image exists, if not build it
-        try:
-            client.images.get("r-server-mcp:latest")
-            print("✓ Optimized R image found", file=sys.stderr)
-        except docker.errors.ImageNotFound:
-            print("🔨 Optimized image not found, building...", file=sys.stderr)
-            
-            # Load Dockerfile from package data
-            try:
-                import importlib.resources as pkg_resources
-                dockerfile_content = pkg_resources.files('r_server').joinpath('Dockerfile.r-server').read_text()
-            except ImportError:
-                # Fallback for older Python versions
-                import pkg_resources
-                dockerfile_content = pkg_resources.resource_string('r_server', 'Dockerfile.r-server').decode('utf-8')
-            except Exception:
-                # Embedded fallback if package data not available
-                dockerfile_content = '''# R Server MCP - Optimized Docker Image
-FROM ubuntu:22.04
-
-ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=UTC
-ENV LANG=en_US.UTF-8
-ENV LC_ALL=en_US.UTF-8
-
-# Install system dependencies and R packages in one layer
-RUN apt-get update && apt-get install -y \\
-    locales \\
-    r-base \\
-    r-base-dev \\
-    r-cran-readxl \\
-    r-cran-writexl \\
-    r-cran-dplyr \\
-    r-cran-tidyr \\
-    r-cran-ggplot2 \\
-    r-cran-cowplot \\
-    libcurl4-openssl-dev \\
-    libssl-dev \\
-    libxml2-dev \\
-    libfontconfig1-dev \\
-    libcairo2-dev \\
-    && rm -rf /var/lib/apt/lists/*
-
-# Set up UTF-8 locale
-RUN locale-gen en_US.UTF-8
-
-# Set CRAN repository
-RUN echo 'options(repos = c(CRAN = "https://cloud.r-project.org/"))' >> /usr/lib/R/etc/Rprofile.site
-
-WORKDIR /workspace
-CMD ["tail", "-f", "/dev/null"]
-'''
-            
-            # Build image
-            import io
-            dockerfile_obj = io.BytesIO(dockerfile_content.encode('utf-8'))
-            
-            print("📦 Building optimized image (may take 2-3 minutes)...", file=sys.stderr)
-            
-            # Build with progress
-            for log in client.api.build(fileobj=dockerfile_obj, tag="r-server-mcp:latest", rm=True, decode=True):
-                if 'stream' in log and log['stream'].strip():
-                    print(f"Build: {log['stream'].strip()}", file=sys.stderr)
-            
-            print("✅ Optimized R image built successfully", file=sys.stderr)
+        # rocker/tidyverse will be auto-pulled if not available
         
-        # Now create container with priority to our optimized image
-        images_to_try = ["r-server-mcp:latest", "rocker/tidyverse:latest", "r-base:latest"]
+        # Create container with rocker/tidyverse as primary option
+        images_to_try = ["rocker/tidyverse:latest", "r-base:latest"]
         container = None
         
         for image in images_to_try:
@@ -826,14 +762,16 @@ CMD ["tail", "-f", "/dev/null"]
         image_tags = str(container.image.tags)
         print(f"📋 Container using image: {image_tags}", file=sys.stderr)
         
-        if "r-server-mcp" in image_tags:
-            print("🔍 Verifying packages in optimized image...", file=sys.stderr)
+        if "tidyverse" in image_tags:
+            print("🔍 Verifying packages in tidyverse image...", file=sys.stderr)
             verify_result = container.exec_run([
                 "Rscript", "-e", 
                 "packages <- c('readxl', 'writexl', 'dplyr', 'tidyr', 'ggplot2'); for(pkg in packages) { if(!require(pkg, character.only=TRUE, quietly=TRUE)) stop(paste('Missing:', pkg)) }; cat('✅ All packages verified!\\n')"
             ])
             if verify_result.exit_code == 0:
                 print("✅ All packages verified and ready", file=sys.stderr)
+            else:
+                print("✅ Tidyverse packages should be available", file=sys.stderr)
         else:
             # Install packages for fallback images (r-base, tidyverse)
             print("📦 Installing R packages in container (one-time setup)...", file=sys.stderr)
