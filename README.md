@@ -6,116 +6,99 @@ A secure, Docker-based Model Context Protocol (MCP) server for R data visualizat
 
 **Key Benefits:**
 - 🗣️ **Natural Language Interface**: Chat with AI to perform complex statistical analyses
-- 🐳 **Secure Docker Execution**: All R code runs in isolated containers for maximum security
+- 🐳 **Secure Docker Execution**: All R code runs in isolated containers with network disabled
 - 📊 **Automatic R Execution**: AI runs R code and returns results without you writing code
-- 📁 **Direct File Access**: Mount local directories so AI can work with your Excel/CSV files
-- 📈 **Publication-Ready Plots**: Generate professional ggplot2 visualizations through conversation
-- ⚡ **Smart Caching**: Results are cached for instant repeated operations
-- 🔄 **Interactive Analysis**: Ask follow-up questions and refine your analysis iteratively
+- 📁 **Multiple Directory Mounting**: Mount multiple local directories for R to access
+- 📈 **Inline Plot Capture**: Plots automatically returned as base64 PNG images
+- 🔒 **PII Protection**: Optional auto-redaction of personal data before it reaches the LLM
+- 💾 **Session Persistence**: R variables persist between calls
+- ⚡ **Smart Caching**: Configurable result caching for instant repeated operations
+- 📦 **Auto Library Detection**: Missing R packages automatically installed
 
 *🌐 [Türkçe](README_TR.md) | **English***
 
 ## Overview
 
-This project is inspired by [gdbelvin's rlang-mcp-server](https://github.com/gdbelvin/rlang-mcp-server) but is a complete Python reimplementation using the FastMCP framework. While the original Go version provided basic R visualization tools, this Python version extends the functionality with comprehensive file management capabilities and enhanced user experience.
+This project is inspired by [gdbelvin's rlang-mcp-server](https://github.com/gdbelvin/rlang-mcp-server) but is a complete Python reimplementation using the FastMCP framework. While the original Go version provided basic R visualization tools, this Python version extends the functionality with comprehensive security, file management, and data privacy features.
 
 ## Features
 
 ### 🎨 **Visualization & Analysis**
 - **ggplot2 Rendering**: Execute R code with ggplot2 commands and return publication-ready visualizations
+- **Inline Plot Capture**: Plots automatically detected and returned as base64 PNG
 - **R Script Execution**: Run any R script with smart file handling and return formatted output
-- **Multiple Formats**: Support for PNG, JPEG, PDF, and SVG output formats
-- **Customizable Output**: Control image dimensions, resolution, and quality
+- **Session Persistence**: R variables and workspace persist between calls via `.RData`
 
-### 📁 **File Management** (New!)
-- **Directory Mounting**: Mount local directories to access files directly in R workspace
+### 📁 **File Management**
+- **Multiple Directory Mounting**: Mount multiple local directories with custom mount points
 - **Smart File Discovery**: Use R scripts to explore and analyze files in mounted directories
+- **Unmount Support**: Cleanly unmount directories when done
 
 ### 📦 **Package Management**
+- **Auto Library Detection**: `library()` and `require()` calls parsed, missing packages auto-installed
 - **Package Installation**: Install R packages on-demand with version control
-- **Package Listing**: Browse installed packages with filtering capabilities
 - **Automatic Dependencies**: Smart package dependency resolution
+- **Temporary Network**: Network temporarily enabled only during package installation
 
 ### 🛡️ **Security & Isolation**
 - **Mandatory Docker**: All R code execution in isolated containers
-- **Pre-built Images**: Uses optimized Docker images (semoss/docker-r-packages, rocker/rstudio)
-- **Path Sanitization**: Protection against directory traversal attacks
-- **File Access Control**: Secure file system access with proper permission checks
+- **Network Disabled by Default**: Container cannot access internet during R execution
+- **Resource Limits**: Configurable memory (default 2GB) and CPU limits
+- **PII Redaction**: Optional automatic detection and masking of personal data in R output
+- **Temporary Network Only**: Network enabled only for package installs, then disabled
 - **Container Isolation**: Complete process and filesystem isolation
-- **Persistent Containers**: Single container per session for better performance
+- **Enhanced Error Messages**: R errors include traceback and call context
+
+### 🔒 **PII Protection** (Optional)
+- **Regex Detection**: TC Kimlik No, phone numbers, email, IBAN, credit cards, patient IDs
+- **NER Name Detection**: Person names detected via multilingual spaCy model
+- **Medical Whitelist**: Statistical and medical terms excluded from false positives
+- **Fallback Support**: Works with or without Presidio installed (regex fallback)
+- **Zero Data Leakage**: PII redacted before output reaches the LLM API
 
 ### 🚀 **Performance & Experience**
-- **FastMCP Framework**: Modern Python MCP implementation with excellent performance
-- **Smart Caching**: In-memory caching for instant repeated operations
+- **FastMCP Framework**: Modern Python MCP implementation (v3.1.1+)
+- **Smart Caching**: Configurable in-memory caching (size + TTL via environment variables)
 - **Persistent Containers**: Reuses same container for all operations (no startup overhead)
+- **Container Warm-up**: Common R packages pre-loaded at container start
 - **Pre-compiled Packages**: Uses Docker images with pre-installed R packages
-- **uv Package Manager**: Lightning-fast dependency management and virtual environments
 
 ## Quick Start
 
 ### Prerequisites
 
-Before installing the MCP server, you need to install the required dependencies on your system:
+- **Docker** (mandatory - must be running)
+- **Python 3.12+**
+- **uv** (recommended) or pip
 
 #### macOS
 
 ```bash
-# Install Homebrew (if not already installed)
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-# Install R
-brew install r
-
-# Install uv (Python package manager)
 brew install uv
-
-# Install Python 3.12+ (if not already installed)
 brew install python@3.12
-
-# Install Docker (required for secure execution)
 brew install --cask docker
 ```
 
 #### Windows
 
 ```powershell
-# Install R from CRAN
-# Download and install from: https://cran.r-project.org/bin/windows/base/
-
-# Install Python 3.12+ from python.org
-# Download from: https://www.python.org/downloads/windows/
-
-# Install uv using pip
 pip install uv
-
-# Install Docker Desktop (required for secure execution)
-# Download from: https://www.docker.com/products/docker-desktop
+# Install Python 3.12+ from https://www.python.org/downloads/windows/
+# Install Docker Desktop from https://www.docker.com/products/docker-desktop
 ```
 
 #### Linux (Ubuntu/Debian)
 
 ```bash
-# Update package list
 sudo apt update
-
-# Install R
-sudo apt install r-base r-base-dev
-
-# Install Python 3.12+
-sudo apt install python3.12 python3.12-venv python3-pip
-
-# Install uv
+sudo apt install python3.12 python3.12-venv python3-pip docker.io
 pip install uv
-
-# Install Docker (required for secure execution)
-sudo apt install docker.io
-sudo systemctl start docker
-sudo systemctl enable docker
+sudo systemctl start docker && sudo systemctl enable docker
 ```
 
-### Installation
+**Note**: Local R installation is not required - all R execution happens inside Docker containers.
 
-After installing the prerequisites, install the MCP server:
+### Installation
 
 ```bash
 # Method 1: Install directly from GitHub (recommended)
@@ -125,15 +108,20 @@ uvx --from git+https://github.com/saidsurucu/rlang-mcp-python rlang-mcp-python
 git clone https://github.com/saidsurucu/rlang-mcp-python.git
 cd rlang-mcp-python
 uv sync
+
+# Method 3: Install with pip
+pip install git+https://github.com/saidsurucu/rlang-mcp-python
+
+# Optional: Install PII protection
+pip install 'rlang-mcp-server[privacy]'
+uv pip install https://github.com/explosion/spacy-models/releases/download/xx_ent_wiki_sm-3.8.0/xx_ent_wiki_sm-3.8.0-py3-none-any.whl
 ```
 
 ## Claude Desktop Integration
 
-To use this MCP server with Claude Desktop:
-
 1. Open Claude Desktop
 2. Go to **Settings** > **Developer** > **Edit Config**
-3. Add this configuration to your MCP servers:
+3. Add this configuration:
 
 ```json
 {
@@ -150,54 +138,7 @@ To use this MCP server with Claude Desktop:
 }
 ```
 
-4. Save the configuration
-5. Restart Claude Desktop
-6. The R-Server tools will now be available in your Claude conversations
-
-```bash
-
-# Method 3: Install with pip
-pip install git+https://github.com/saidsurucu/rlang-mcp-python
-```
-
-### System Requirements
-
-- **Python 3.12+**
-- **Docker** (mandatory - all R execution happens in containers)
-- **uv** (recommended) or pip for package management
-
-**Note**: Local R installation is not required - all R execution happens inside Docker containers.
-
-### Running the Server
-
-```bash
-# Using uvx (recommended)
-uvx --from . r-server-mcp
-
-# Or using uv run
-uv run r-server-mcp
-
-# Or using Python directly
-python -m r_server
-```
-
-## Tools Available
-
-This server provides **5 essential tools**:
-
-| Tool | Description | Category |
-|------|-------------|----------|
-| `initialize_r_container` | Initialize persistent R container | Container Management |
-| `container_status` | Check container status and info | Container Management |
-| `mount_directory` | Mount local directory to /data in container | Directory Management |
-| `execute_r_script` | Execute R scripts with smart file handling | Execution |
-| `install_r_package` | Install R packages on-demand | Package Management |
-
-## MCP Integration
-
-### Claude Desktop Configuration
-
-Add to your `claude_desktop_config.json`:
+### With Environment Variables (Recommended for Sensitive Data)
 
 ```json
 {
@@ -205,105 +146,146 @@ Add to your `claude_desktop_config.json`:
     "r-server-python": {
       "command": "uvx",
       "args": [
-        "--from", 
-        "/path/to/rlang-mcp-python",
-        "r-server-mcp"
-      ]
+        "--from",
+        "git+https://github.com/saidsurucu/rlang-mcp-python",
+        "rlang-mcp-python"
+      ],
+      "env": {
+        "R_MCP_PII_ENABLED": "true",
+        "R_MCP_NETWORK_DISABLED": "true",
+        "R_MCP_MEM_LIMIT": "4g"
+      }
     }
   }
 }
 ```
 
-## Step-by-Step Usage Workflow
+## Environment Variables
 
-### Step 1: Mount Your Data Directory
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `R_MCP_MEM_LIMIT` | `2g` | Container memory limit |
+| `R_MCP_CPU_QUOTA` | `200000` | CPU quota (100000 = 1 CPU) |
+| `R_MCP_CACHE_TTL` | `3600` | Cache time-to-live in seconds |
+| `R_MCP_CACHE_SIZE` | `100` | Maximum cached results |
+| `R_MCP_SESSION` | `true` | Persist R variables between calls |
+| `R_MCP_NETWORK_DISABLED` | `true` | Container network isolation |
+| `R_MCP_PII_ENABLED` | `false` | PII redaction on R output |
 
-First, tell Claude to mount your data directory. Use a prompt like:
+## Tools Available
 
-> "Please mount my data directory at /Users/you/Documents/data-analysis as the R working directory so you can analyze the files in that folder."
+This server provides **7 tools**:
 
-This command:
-- Sets the specified path as the R working directory
-- Creates an `r_workspace` subdirectory automatically
-- Allows Claude to read all files in this directory
-- Returns confirmation with available files
+| Tool | Description | Category |
+|------|-------------|----------|
+| `mount_directory` | Mount local directories (supports multiple, custom mount points) | Directory |
+| `unmount_directory` | Unmount directories (single or all) | Directory |
+| `execute_r_script` | Run R code with plot capture, auto library detection, session persistence, PII redaction | Execution |
+| `container_status` | Check health, resources, R version, session, cache stats | Monitoring |
+| `initialize_r_container` | Start container with resource limits and warm-up | Container |
+| `install_r_package` | Install packages on-demand (temp network enable) | Packages |
+| `clear_session` | Clear R workspace (remove persisted variables) | Session |
 
-### Step 2: Explore Available Data
+## PII Protection
 
-Ask Claude to explore your data files:
+When working with sensitive data (healthcare, financial, personal), enable PII protection to automatically redact personally identifiable information from R output before it reaches the LLM.
 
-> "List all the files in my mounted directory, especially Excel files, and show me what data is available for analysis."
+### How It Works
 
-> "Can you give me detailed information about the sales_data.xlsx file, including what sheets it contains?"
+```
+R code runs in Docker (local, network disabled)
+    ↓
+R output (stdout)
+    ↓ R_MCP_PII_ENABLED=true
+[Presidio Regex] → TC, phone, email, IBAN, credit card, patient ID
+[spaCy NER]      → Person names (Ali Yılmaz, Mehmet Öz...)
+[Whitelist]      → Filter false positives (medical/statistical terms)
+    ↓
+Sanitized output → LLM API (no PII leaves your machine)
+```
 
-### Step 3: Analyze Your Data
+### What Gets Redacted
 
-Now request analysis of your data:
+| PII Type | Example | Redacted As |
+|----------|---------|-------------|
+| TC Kimlik No | `12345678901` | `<TR_TC_KIMLIK>` |
+| Phone | `0532 456 7890` | `<TR_PHONE>` |
+| Email | `ali@mail.com` | `<EMAIL>` |
+| IBAN | `TR33000610...` | `<TR_IBAN>` |
+| Credit Card | `4532-1234-5678-9012` | `<CREDIT_CARD>` |
+| Patient ID | `Hasta No: 2024-15832` | `<TR_HASTA_NO>` |
+| Person Name | `Ali Yılmaz` | `<PERSON>` |
 
-> "Please analyze the sales data in sales_data.xlsx. Load the data, show me a summary, and calculate monthly sales totals grouped by month."
+### What Passes Through (No False Positives)
 
-> "Read the financial data from quarterly_report.xlsx and perform a comprehensive analysis comparing Q1 and Q2 performance."
+- `mean=45.2, sd=12.3, n=150` — aggregate statistics
+- `table(data$diagnosis)` — frequency tables
+- `HbA1c`, `Tip 2 Diyabet` — medical terms
+- `Min. 1st Qu. Median Mean` — R output
 
-### Step 4: Create Visualizations
+### Fallback Behavior
 
-Request custom visualizations:
+| Installed | Detection |
+|-----------|-----------|
+| `presidio` + `xx_ent_wiki_sm` | Full: regex + name detection |
+| `presidio` only | Regex: TC, phone, email, IBAN, credit card |
+| Neither | Pure regex fallback (no extra dependencies) |
 
-> "Create a bar chart showing monthly sales by category using the data in sales_data.xlsx. Make it publication-ready with proper labels and colors."
+## Security Model
 
-> "Generate a boxplot comparing revenue distribution between quarters and departments from my quarterly report data."
+```
+┌─────────────────────────────────────────────────┐
+│                 Security Layers                  │
+├─────────────────────────────────────────────────┤
+│ 1. Docker Isolation    │ All R code in container │
+│ 2. Network Disabled    │ No internet by default  │
+│ 3. Resource Limits     │ Memory + CPU caps       │
+│ 4. PII Redaction       │ Output sanitized        │
+│ 5. Temp Network Only   │ Package installs only   │
+└─────────────────────────────────────────────────┘
+```
 
-### Directory Structure Method
+## Usage Examples
 
-The recommended workflow uses directory mounting:
+### Basic Analysis
+> "Mount my data directory at /Users/me/data and analyze the sales_data.xlsx file. Show summary statistics and monthly trends."
 
-> "Please mount my data directory so you can analyze all my Excel files for trends and patterns."
+### Visualization
+> "Create a publication-ready boxplot comparing revenue by quarter using my data."
 
-### Complete Workflow Example
+### Sensitive Data (with PII enabled)
+> "Load the patient data and show me aggregate statistics: mean age, diagnosis distribution, and HbA1c levels by treatment group."
 
-Here's how you might interact with Claude for a full analysis:
+R output is automatically sanitized — even if raw data is accidentally printed, personal information is redacted before reaching the AI.
 
-**Initial Setup:**
-> "Please mount my project directory at /Users/you/Documents/financial-analysis so you can access my data files."
+### Session Workflow
+```python
+# Step 1: Load data (persists in session)
+execute_r_script("data <- read_excel('/data/patients.xlsx')")
 
-**Data Exploration:**
-> "What Excel files do you see in the directory? Can you tell me about the structure of quarterly_report.xlsx?"
+# Step 2: Analyze (data variable still available)
+execute_r_script("summary(data)")
 
-**Analysis Request:**
-> "Please perform a comprehensive financial analysis using the quarterly report data. I want to see:
-> - Summary statistics for each quarter
-> - Revenue comparisons between Q1 and Q2  
-> - Performance by department
-> - Any notable trends or patterns"
+# Step 3: Visualize (still in session)
+execute_r_script("ggplot(data, aes(x=age)) + geom_histogram()")
 
-**Visualization Request:**
-> "Create professional visualizations showing:
-> 1. Revenue distribution by quarter and department as a boxplot
-> 2. Department performance comparison as a bar chart
-> Make sure they're suitable for a business presentation."
-
-**Follow-up Analysis:**
-> "Based on the analysis, what are the key insights about our quarterly performance? Are there any departments that need attention?"
+# Step 4: Clean up
+clear_session()
+```
 
 ## Docker Support
 
-Docker is mandatory for security. The server uses pre-built Docker images with optimized R environments:
+Docker is mandatory for security. The server uses pre-built Docker images:
 
-```bash
-# Ensure Docker is running
-docker --version
+1. **`semoss/docker-r-packages`** (primary — comprehensive R packages)
+2. **`rocker/tidyverse`** (fallback — data science packages)
+3. **`r-base`** (final fallback — minimal R)
 
-# Images are automatically pulled on first use:
-# - semoss/docker-r-packages (primary - comprehensive R packages)
-# - rocker/rstudio (fallback - widely used R environment)
-# - r-base:latest (final fallback - minimal R installation)
-```
-
-The server will automatically:
-1. Check if Docker is running
-2. Pull the appropriate Docker image if needed
-3. Create a persistent container for the session
-4. Mount directories as /data inside the container
-5. Execute all R code in the isolated container
+Images are automatically pulled on first use. The container:
+- Runs with network disabled (re-enabled only for package installs)
+- Has memory and CPU limits enforced
+- Persists across all operations in the session
+- Is automatically cleaned up on server shutdown
 
 ## Development
 
@@ -311,130 +293,64 @@ The server will automatically:
 # Install development dependencies
 uv sync --dev
 
-# Run tests
-uv run pytest
+# Install PII protection for testing
+uv pip install presidio-analyzer presidio-anonymizer spacy
+uv pip install https://github.com/explosion/spacy-models/releases/download/xx_ent_wiki_sm-3.8.0/xx_ent_wiki_sm-3.8.0-py3-none-any.whl
 
 # Run linting
 uv run ruff check
 uv run black --check .
-
-# Type checking
-uv run mypy r_server.py
 ```
 
 ## Troubleshooting
 
-### Common Issues
-
-#### R not found
+### Docker Issues
 ```bash
-# macOS: Ensure R is in PATH
-echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.zshrc
-source ~/.zshrc
+# Ensure Docker is running
+docker --version
 
-# Windows: Add R to system PATH
-# Add C:\Program Files\R\R-x.x.x\bin to your PATH environment variable
-
-# Linux: Install R development packages
-sudo apt install r-base-dev
-```
-
-#### Python version issues
-```bash
-# Check Python version
-python --version
-
-# Use specific Python version with uv
-uv python install 3.12
-uv python pin 3.12
-```
-
-#### R package installation failures
-```bash
-# macOS: Install system dependencies
-brew install harfbuzz fribidi
-brew install --cask xquartz
-
-# Ubuntu/Debian: Install system dependencies
-sudo apt install libcurl4-openssl-dev libssl-dev libxml2-dev
-sudo apt install libharfbuzz-dev libfribidi-dev
-
-# Windows: Use binary packages
-# In R console:
-install.packages('ggplot2', type='binary')
-```
-
-#### uv command not found
-```bash
-# Install uv globally
-pip install --user uv
-
-# Or use curl on Unix systems
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Windows: Use pip or download from GitHub releases
-```
-
-#### Permission denied errors
-```bash
-# Linux/macOS: Fix R library permissions
-sudo chmod -R 755 /usr/local/lib/R
-sudo chown -R $USER /usr/local/lib/R/site-library
-
-# Or install packages in user library
-# In R console:
-.libPaths()  # Check library paths
-install.packages('ggplot2', lib=.libPaths()[1])
-```
-
-#### Docker issues
-```bash
-# Start Docker service (Linux)
+# Start Docker (Linux)
 sudo systemctl start docker
-
-# Add user to docker group (Linux)
-sudo usermod -aG docker $USER
-# Logout and login again
 
 # macOS/Windows: Ensure Docker Desktop is running
 ```
 
-### Verification
-
-Test your installation:
-
+### PII Protection Issues
 ```bash
-# Test R installation
-Rscript -e "R.version.string"
+# Check if presidio is installed
+python -c "import presidio_analyzer; print('OK')"
 
-# Test R packages
-Rscript -e "library(ggplot2); library(readxl); cat('R packages OK\n')"
+# Install NER model for name detection
+uv pip install https://github.com/explosion/spacy-models/releases/download/xx_ent_wiki_sm-3.8.0/xx_ent_wiki_sm-3.8.0-py3-none-any.whl
 
-# Test Python/uv
-uv --version
-python --version
-
-# Test MCP server
-uvx --from git+https://github.com/saidsurucu/rlang-mcp-python rlang-mcp-python --help
+# Verify NER model works
+python -c "import spacy; nlp = spacy.load('xx_ent_wiki_sm'); print('NER OK')"
 ```
+
+### Common Issues
+- **First run slow**: Normal — Docker image pull + container setup (~15-30s)
+- **Package install fails**: Network temporarily enabled, check Docker network
+- **Container unresponsive**: Restart the MCP server
+- **PII not detected**: Ensure `R_MCP_PII_ENABLED=true` is set
 
 ## Comparison with Original
 
 | Feature | Original (Go) | This Version (Python) |
 |---------|---------------|----------------------|
-| Core Tools | 2 | **5** |
-| Directory Mounting | ❌ | ✅ |
-| File Management | ❌ | ✅ |
-| Package Management | ❌ | ✅ |
-| File Access Control | ❌ | ✅ |
-| Smart File Handling | ❌ | ✅ |
-| Modern Framework | ❌ | ✅ (FastMCP) |
-| Package Manager | Go modules | **uv** |
-| Testing Suite | Basic | **Comprehensive** |
+| Core Tools | 2 | **7** |
+| Directory Mounting | ❌ | ✅ (multiple) |
+| Plot Capture | Basic | ✅ (auto base64 PNG) |
+| Session Persistence | ❌ | ✅ (.RData) |
+| Auto Library Install | ❌ | ✅ |
+| Network Isolation | ❌ | ✅ (default) |
+| PII Protection | ❌ | ✅ (Presidio + NER) |
+| Resource Limits | ❌ | ✅ (memory + CPU) |
+| Container Healthcheck | ❌ | ✅ |
+| Modern Framework | ❌ | ✅ (FastMCP 3.1+) |
 
 ## Contributing
 
-Contributions are welcome! Please read our contributing guidelines and submit pull requests for any enhancements.
+Contributions are welcome! Please submit pull requests for any enhancements.
 
 ## License
 
@@ -446,4 +362,5 @@ This work is licensed under a [Creative Commons Attribution-NonCommercial 4.0 In
 
 - Inspired by [gdbelvin's rlang-mcp-server](https://github.com/gdbelvin/rlang-mcp-server)
 - Built with [FastMCP](https://github.com/jlowin/fastmcp)
+- PII protection powered by [Microsoft Presidio](https://github.com/microsoft/presidio) and [spaCy](https://spacy.io/)
 - Powered by [uv](https://github.com/astral-sh/uv) for fast Python package management
